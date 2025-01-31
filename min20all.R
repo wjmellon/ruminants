@@ -70,14 +70,19 @@ pglsSEyPagel=function(model, data, tree, lambdaInterval=c(0,1),...){
 #read data
 Data <- read.csv("min20-2022.05.16.csv")
 View(Data)
-
-
-
+#Filter out each family in ruminants
+DataRum <- subset(Data, Family == "Bovidae" | Family == "Cervidae" | Family == "Giraffidae" | Family == "Camelidae" | Family == "Ovidae" | Family == "Antilocapridae")
+#DataRum <- subset(DataRum, Family == "Cervidae")
+#DataRum <- subset(DataRum, Family == "Giraffidae")
+#DataRum <- subset(DataRum, Family == "Camelidae")
+#DataRum <- subset(DataRum, Family == "Ovidae")
+#DataRum <- subset(DataRum, Family == "Antilocapridae")
 
 #adult weight models
 #adult weight neo
-
-cutData <- Data[,c(5,9,10,11,13,38,42),drop=FALSE] 
+#Modified Cutdata to only work on ruminants data set
+cutData <- DataRum[,c(5,9,10,11,13,38,42),drop=FALSE] 
+#cutData <- DataRum[,c(5,9,10,11,13,38,42),drop=FALSE] 
 cutData[cutData$adult_weight == -1, ] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -143,7 +148,7 @@ wgtneo<-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(adult_weight.g.))
 #ggsave(filename='wgtneol.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #adult weight mal
-cutData <- Data[,c(5,9,10,11,17,38,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,38,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -211,7 +216,7 @@ ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(adult_weight.g.)))+
 
 #gestation models
 #gestation neo
-cutData <- Data[,c(5,9,10,11,13,30,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,30,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -269,7 +274,7 @@ gestneo<-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(Gestation.months
 #ggsave(filename='S2gestneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #gestation mal
-cutData <- Data[,c(5,9,10,11,17,30,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,30,42),drop=FALSE] 
 cutData[cutData$Gestation.months. < 0, ] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -331,7 +336,7 @@ gestmal<-ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(Gestation.month
 
 #litter size models 
 #litter size neo
-cutData <- Data[,c(5,9,10,11,13,33,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,33,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -393,7 +398,7 @@ ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(litter_size))) +
 ggsave(filename='S1litneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #litter size mal
-cutData <- Data[,c(5,9,10,11,17,33,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,33,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 
@@ -458,7 +463,7 @@ ggsave(filename='S2litmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 ### Longevity model
 #longevity neo
-cutData <- Data[,c(5,9,10,11,13,40,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,40,42),drop=FALSE] 
 cutData[cutData$max_longevity.months. < 0,] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -527,7 +532,7 @@ longneo<-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(max_longevity.mo
 
 #longevity mal
 
-cutData <- Data[,c(5,9,10,11,17,40,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,40,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -593,7 +598,7 @@ ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(max_longevity.months.)))
 
 ##BMR models
 #bmr neo
-cutData <- Data[,c(5,9,10,11,13,41,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,41,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -659,7 +664,7 @@ ggsave(filename='S3bmrneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #bmr mal
 
-cutData <- Data[,c(5,9,10,11,17,41,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,41,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -726,7 +731,7 @@ ggsave(filename='S4bmrmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #wxl models #weight and longevity
 #wxl neo
-cutData <- Data[,c(5,9,10,11,13,40,38,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,40,38,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -791,7 +796,7 @@ ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(adult_weight.g.*max_longe
 ggsave(filename='S5masslongneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #wxl mal
-cutData <- Data[,c(5,9,10,11,17,40,38,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,40,38,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -856,7 +861,7 @@ ggsave(filename='S6wgtlongmal.pdf', width=13, height=10, limitsize=FALSE,bg="whi
 
 
 #litters per year neo
-cutData <- Data[,c(5,9,10,11,13,34,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,34,42),drop=FALSE] 
 cutData <- cutData[!(cutData$common_name %in% c("Dwarf caimen","Agassiz's desert tortoise","Egyptian snouted cobra","Mangrove snake","Tiger rat snake","Madagscar tree boa")),]
 cutData[cutData$litters_year < 0, ] <-NA
 cutData <- na.omit(cutData)
@@ -924,7 +929,7 @@ lityearneo/gestmal
 ggsave(filename='litgest.pdf', width=9.5, height=18, limitsize=FALSE,bg="white")
 
 #litter per year mal
-cutData <- Data[,c(5,9,10,11,17,34,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,34,42),drop=FALSE] 
 cutData <- cutData[!(cutData$common_name %in% c("Dwarf caimen","Agassiz's desert tortoise","Egyptian snouted cobra","Mangrove snake","Tiger rat snake","Madagscar tree boa")),]
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
@@ -987,7 +992,7 @@ ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(litters_year))) +
 ggsave(filename='S8lityearmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 ####Female Maturity neo
-cutData <- Data[,c(5,9,10,11,13,28,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,28,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1050,7 +1055,7 @@ ggsave(filename='S9femmatneo.pdf', width=13, height=10, limitsize=FALSE,bg="whit
 
 
 #Female Maturity Mal
-cutData <- Data[,c(5,9,10,11,17,28,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,28,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1112,7 +1117,7 @@ ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(female_maturity.months.)
 ggsave(filename='S10femmatmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 ####Male Maturity neo
-cutData <- Data[,c(5,9,10,11,13,29,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,29,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1174,7 +1179,7 @@ ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(male_maturity.months.))) 
 ggsave(filename='S11malematneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #Male Maturity Mal
-cutData <- Data[,c(5,9,10,11,17,29,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,29,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1236,7 +1241,7 @@ ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(male_maturity.months.)))
 ggsave(filename='S12malematmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #Weaning Body Mass neo
-cutData <- Data[,c(5,9,10,11,13,37,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,37,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1298,7 +1303,7 @@ ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(weaning_weight.g.))) +
 ggsave(filename='S13weanneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #Weaning Body Mass Mal
-cutData <- Data[,c(5,9,10,11,17,37,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,37,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1359,7 +1364,7 @@ ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(weaning_weight.g.))) +
 ggsave(filename='S14weanmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #Growth Rate Neo
-cutData <- Data[,c(5,9,10,11,13,39,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,39,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1421,7 +1426,7 @@ ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(growth_rate.1.days.))) +
 ggsave(filename='S15growneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
 #Growth Rate Mal
-cutData <- Data[,c(5,9,10,11,17,39,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,39,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1484,7 +1489,7 @@ ggsave(filename='S16growmal.pdf', width=13, height=10, limitsize=FALSE,bg="white
 
 #w+g
 
-cutData <- Data[,c(5,9,10,11,13,38,30,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,38,30,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1575,7 +1580,7 @@ ggsave(filename='S19wgtgestneo.pdf', width=13, height=10, limitsize=FALSE,bg="wh
 
 #w+g mal
 
-cutData <- Data[,c(5,9,10,11,17,38,30,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,38,30,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1658,7 +1663,7 @@ ggsave(filename='S20wgtgestmal.pdf', width=13, height=10, limitsize=FALSE,bg="wh
 
 #g+l
 
-cutData <- Data[,c(5,9,10,11,13,40,30,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,40,30,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1710,7 +1715,7 @@ combopwpplneo<-fisher(pvalues)
 
 #g+l mal
 
-cutData <- Data[,c(5,9,10,11,17,40,30,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,17,40,30,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1760,7 +1765,7 @@ combopwpplmal<-fisher(pvalues)
 
 #adult weight and gest length model
 
-cutData <- Data[,c(5,9,10,11,13,38,30,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,38,30,42),drop=FALSE] 
 cutData[cutData == -1 ] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
@@ -1836,7 +1841,7 @@ wgtgest
 
 #long and gest length model
 
-cutData <- Data[,c(5,9,10,11,13,40,30,42),drop=FALSE] 
+cutData <- DataRum[,c(5,9,10,11,13,40,30,42),drop=FALSE] 
 cutData[cutData == -1 ] <-NA
 cutData <- na.omit(cutData)
 tree <- read.tree("min20Fixed516.nwk")
