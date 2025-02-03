@@ -72,11 +72,6 @@ Data <- read.csv("min20-2022.05.16.csv")
 View(Data)
 #Filter out each family in ruminants
 DataRum <- subset(Data, Family == "Bovidae" | Family == "Cervidae" | Family == "Giraffidae" | Family == "Camelidae" | Family == "Ovidae" | Family == "Antilocapridae")
-#DataRum <- subset(DataRum, Family == "Cervidae")
-#DataRum <- subset(DataRum, Family == "Giraffidae")
-#DataRum <- subset(DataRum, Family == "Camelidae")
-#DataRum <- subset(DataRum, Family == "Ovidae")
-#DataRum <- subset(DataRum, Family == "Antilocapridae")
 
 #adult weight models
 #adult weight neo
@@ -85,6 +80,7 @@ cutData <- DataRum[,c(5,9,10,11,13,38,42),drop=FALSE]
 #cutData <- DataRum[,c(5,9,10,11,13,38,42),drop=FALSE] 
 cutData[cutData$adult_weight == -1, ] <-NA
 cutData <- na.omit(cutData)
+# if (nrow(cutData) != 0) {
 tree <- read.tree("min20Fixed516.nwk")
 
 cutData$Species <- gsub(" ", "_", cutData$Species) 
@@ -621,46 +617,51 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-BMR.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(metabolic_rate),data=cutData,
-                      tree=pruned.tree,method="ML",se=SE)
-summary(BMR.neo)
-
-#grab r squared, lambda, and p values from summary 
-
-r.v.bmrneo <- R2(phy = pruned.tree,BMR.neo)
-r.v.bmrneo <- format(r.v.bmrneo[3])
-r.v.bmrneo <-signif(as.numeric(r.v.bmrneo), digits= 2)
-ld.v.bmrneo<- summary(BMR.neo)$modelStruct$corStruct
-ld.v.bmrneo <- signif(ld.v.bmrneo[1], digits = 2)
-p.v.bmrneo<-summary(BMR.neo)$tTable
-p.v.bmrneo<-signif(p.v.bmrneo[2,4], digits = 3)
-
-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(metabolic_rate))) + 
-  scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
-  scale_y_continuous(
-    breaks = c(0, 25,50,75),
-    labels = c(0, 25,50,75))+
-  geom_abline(intercept = coef(BMR.neo)[1]*100, slope =  coef(BMR.neo)[2]*100,
-              color = 'grey',size = 1.2) +
-  theme_cowplot(12)+
-  theme(axis.title = element_text(size = 18))+
-  ylab("Neoplasia Prevalence (%)") +
-  xlab("(log10) Basal Metabolic Rate") +
-  geom_point(aes(colour= Clade, size = RecordsWithDenominators)) +
-  geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
-  labs(title = "Neoplasia Prevalence vs. Metabolic Rate in Mammals",  
-       subtitle =bquote(p-value:.(p.v.bmrneo)~R^2:.(r.v.bmrneo)~Lambda:.(ld.v.bmrneo))) +
-  guides(colour = guide_legend(override.aes = list(size=5))) +
-  theme(
-    plot.title = element_text(size = 20, face = "bold")) +
-  theme(legend.position = "bottom")+   labs(size="Total Necropsies")+
-  guides(size=guide_legend())+
-  coord_cartesian(xlim = c(log10(min(cutData$metabolic_rate)),log10(max(cutData$metabolic_rate))),
-                  ylim = c(0,75),clip = "off")+
-  annotate("text", x=.9, y=83.8, label = "3", size = 7)
-
-ggsave(filename='S3bmrneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+if (nrow(cutData) > 2) {
+  print("Data set has more than 2 entries, running stats model")
+  BMR.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(metabolic_rate),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  summary(BMR.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.bmrneo <- R2(phy = pruned.tree,BMR.neo)
+  r.v.bmrneo <- format(r.v.bmrneo[3])
+  r.v.bmrneo <-signif(as.numeric(r.v.bmrneo), digits= 2)
+  ld.v.bmrneo<- summary(BMR.neo)$modelStruct$corStruct
+  ld.v.bmrneo <- signif(ld.v.bmrneo[1], digits = 2)
+  p.v.bmrneo<-summary(BMR.neo)$tTable
+  p.v.bmrneo<-signif(p.v.bmrneo[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(metabolic_rate))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(BMR.neo)[1]*100, slope =  coef(BMR.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Basal Metabolic Rate") +
+    geom_point(aes(colour= Clade, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Metabolic Rate in Mammals",  
+         subtitle =bquote(p-value:.(p.v.bmrneo)~R^2:.(r.v.bmrneo)~Lambda:.(ld.v.bmrneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c(log10(min(cutData$metabolic_rate)),log10(max(cutData$metabolic_rate))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text", x=.9, y=83.8, label = "3", size = 7)
+  
+  ggsave(filename='S3bmrneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+}
+if (nrow(cutData) < 3) {
+  print("Data set has less than 3 entries, stopping iteration")
+}  
 
 #bmr mal
 
