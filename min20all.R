@@ -73,6 +73,9 @@ View(Data)
 #Filter out each family in ruminants
 DataRum <- subset(Data, Family == "Bovidae" | Family == "Cervidae" | Family == "Giraffidae" | Family == "Camelidae" | Family == "Ovidae" | Family == "Antilocapridae")
 
+#Data frame for summary stats
+SummaryStats = data.frame(matrix(nrow=0, ncol=5),stringsAsFactors=FALSE)
+
 #adult weight models
 #adult weight neo
 #Modified Cutdata to only work on ruminants data set
@@ -96,9 +99,8 @@ rownames(cutData)<-cutData$Species
 SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
-
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   adult.weight.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(adult_weight.g.),data=cutData,tree=pruned.tree,se=SE,method = "ML")
   
   summary(adult.weight.neo) 
@@ -141,9 +143,15 @@ if (nrow(cutData) > 10) {}
     theme(legend.position = "bottom")+
     labs(colour="Clade", size="Total Necropsies")
 
-
   #ggsave(filename='wgtneol.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs AdultWeight",nrow(cutData), r.v.adult.weight.neo, p.v.adult.weight.neo, ld.v.adult.weight.neo))
+  
+  #Print stats
+  print(SummaryStats)
+  }
+  
 #adult weight mal
 cutData <- DataRum[,c(5,9,10,11,17,38,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
@@ -165,7 +173,7 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   adult.weight.mal<-pglsSEyPagel(MalignancyPrevalence~log10(adult_weight.g.),data=cutData,
                                  tree=pruned.tree,se=SE,method="ML")
   summary(adult.weight.mal)
@@ -209,8 +217,14 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=.42, y=50.3, label = "1", size = 7)
 
 
-
   #ggsave(filename='S1wgtmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs AdultWeight",nrow(cutData), r.v.adult.weight.mal, p.v.adult.weight.mal, ld.v.adult.weight.mal))
+  
+  #Print stats
+  print(SummaryStats)
+  }
 
 #gestation models
 #gestation neo
@@ -234,7 +248,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   gestation.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation.months.),data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   
@@ -271,6 +285,13 @@ if (nrow(cutData) > 10) {}
     labs(title="A")
 
   #ggsave(filename='S2gestneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Gest",nrow(cutData), r.v.gestneo, p.v.gestneo, ld.v.gestneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #gestation mal
 cutData <- DataRum[,c(5,9,10,11,17,30,42),drop=FALSE] 
@@ -292,7 +313,7 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   gestation.mal<-pglsSEyPagel(MalignancyPrevalence~log10(Gestation.months.),data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   summary(gestation.mal)
@@ -329,10 +350,16 @@ if (nrow(cutData) > 10) {}
 
   #ggsave(filename='gestmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
 
-#gestneo/gestmal
+  #gestneo/gestmal
 
-#ggsave(filename='gestneomal.pdf', width=9.5, height=18, limitsize=FALSE,bg="white")
-
+  #ggsave(filename='gestneomal.pdf', width=9.5, height=18, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Gest",nrow(cutData), r.v.gestmal, p.v.gestmal, ld.v.gestmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #litter size models 
 #litter size neo
@@ -356,7 +383,7 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   litter.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(litter_size),data=cutData,
                            tree=pruned.tree,method="ML",se=SE)
   summary(litter.neo)
@@ -397,7 +424,15 @@ if (nrow(cutData) > 10) {}
 
 
   ggsave(filename='S1litneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Lit",nrow(cutData), r.v.litneo, p.v.litneo, ld.v.litneo))
+  
+  #Print stats
+  print(SummaryStats)
+  
+}
+  
 #litter size mal
 cutData <- DataRum[,c(5,9,10,11,17,33,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
@@ -420,7 +455,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   litter.mal <- pglsSEyPagel(MalignancyPrevalence~log10(litter_size),data=cutData,
                              tree=pruned.tree,method="ML",se=SE)
   summary(litter.mal)
@@ -461,7 +496,12 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=-0.35, y=50.3, label = "2", size = 7)
 
   ggsave(filename='S2litmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Lit",nrow(cutData), r.v.litmal, p.v.litmal, ld.v.litmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 ### Longevity model
 #longevity neo
@@ -486,7 +526,7 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   longevity.neo<-pglsSEyPagel(NeoplasiaPrevalence~max_longevity.months.,data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   summary(longevity.neo)
@@ -527,7 +567,13 @@ if (nrow(cutData) > 10) {}
   
   
   #ggsave(filename='longneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Longevity",nrow(cutData), r.v.longneo, p.v.longneo, ld.v.longneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #create weight over longevity model
 #wgtneo/longneo
@@ -558,7 +604,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   longevity.mal<-pglsSEyPagel(MalignancyPrevalence~log10(max_longevity.months.),data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   summary(longevity.mal)
@@ -598,7 +644,13 @@ if (nrow(cutData) > 10) {}
     #annotate("text", x=1.07, y=50.3, label = "5", size = 7)
   
   #ggsave(filename='S5longmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Longevity",nrow(cutData), r.v.longmal, p.v.longmal, ld.v.longmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 ##BMR models
 #bmr neo
@@ -625,7 +677,7 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   print("Data set has more than 2 entries, running stats model")
   BMR.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(metabolic_rate),data=cutData,
                         tree=pruned.tree,method="ML",se=SE)
@@ -666,10 +718,13 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=.9, y=83.8, label = "3", size = 7)
   
     ggsave(filename='S3bmrneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+    #rbind adds a new row to a dataframe
+    SummaryStats <- rbind(SummaryStats, list("Neo vs BMR",nrow(cutData), r.v.bmrneo, p.v.bmrneo, ld.v.bmrneo))
+    
+    #Print stats
+    print(SummaryStats)
+}
 
-if (nrow(cutData) < 3) {
-  print("Data set has less than 3 entries, stopping iteration")
-}  
 
 #bmr mal
 
@@ -697,7 +752,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   BMR.mal<-pglsSEyPagel(MalignancyPrevalence~log10(metabolic_rate),data=cutData,
                         tree=pruned.tree,method="ML",se=SE)
   summary(BMR.mal)
@@ -737,7 +792,12 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=.9, y=50.3, label = "4", size = 7)
 
   ggsave(filename='S4bmrmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs BMR",nrow(cutData), r.v.bmrmal, p.v.bmrmal, ld.v.bmrmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #wxl models #weight and longevity
 #wxl neo
@@ -764,7 +824,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   wxl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(max_longevity.months.*adult_weight.g.),data=cutData,
                         tree=pruned.tree,method="ML",se=SE)
   
@@ -805,6 +865,13 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=2, y=83.8, label = "5", size = 7)
 
   ggsave(filename='S5masslongneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Masslong",nrow(cutData), r.v.wxneo, p.v.wxneo, ld.v.wxneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #wxl mal
 cutData <- DataRum[,c(5,9,10,11,17,40,38,42),drop=FALSE] 
@@ -830,7 +897,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   wxl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(max_longevity.months.*adult_weight.g.),data=cutData,
                         tree=pruned.tree,method="ML",se=SE)
   
@@ -870,7 +937,12 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=2, y=50.3, label = "6", size = 7)
 
   ggsave(filename='S6wgtlongmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Weight",nrow(cutData), r.v.wxmal, p.v.wxmal, ld.v.wxmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #litters per year neo
 cutData <- DataRum[,c(5,9,10,11,13,34,42),drop=FALSE] 
@@ -894,7 +966,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   lityear.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(litters_year),data=cutData,
                             tree=pruned.tree,method="ML",se=SE)
   summary(lityear.neo)
@@ -935,11 +1007,18 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=2, y=50.3, label = "5", size = 7)
 
   ggsave(plot = lityearneo,filename='S5lityearneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs LitYear",nrow(cutData), r.v.lyearneo, p.v.lyearneo, ld.v.lyearneo))
+  
+  #Print stats
+  print(SummaryStats)
 
 
-#create lit year over gest model
-lityearneo/gestmal
-ggsave(filename='litgest.pdf', width=9.5, height=18, limitsize=FALSE,bg="white")
+  #create lit year over gest model
+  lityearneo/gestmal
+  ggsave(filename='litgest.pdf', width=9.5, height=18, limitsize=FALSE,bg="white")
+}
 
 #litter per year mal
 cutData <- DataRum[,c(5,9,10,11,17,34,42),drop=FALSE] 
@@ -964,7 +1043,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   lityear.mal<-pglsSEyPagel(MalignancyPrevalence~log10(litters_year),data=cutData,
                             tree=pruned.tree,method="ML",se=SE)
   summary(lityear.mal)
@@ -1004,6 +1083,13 @@ if (nrow(cutData) > 10) {}
     annotate("text",  x=-.85, y=50.3, label = "8", size = 7)
 
   ggsave(filename='S8lityearmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs LitYear",nrow(cutData), r.v.lyearmal, p.v.lyearmal, ld.v.lyearmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
 
 ####Female Maturity neo
 cutData <- DataRum[,c(5,9,10,11,13,28,42),drop=FALSE] 
@@ -1027,7 +1113,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   Fmaturity.neo<-pglsSEyPagel(NeoplasiaPrevalence~female_maturity.months.,data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   summary(Fmaturity.neo)
@@ -1067,7 +1153,13 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=-.09, y=83.9, label = "9", size = 7)
 
   ggsave(filename='S9femmatneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs FemMat",nrow(cutData), r.v.fmaturityneo, p.v.fmaturityneo, ld.v.fmaturityneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #Female Maturity Mal
 cutData <- DataRum[,c(5,9,10,11,17,28,42),drop=FALSE] 
@@ -1091,7 +1183,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   Fmaturity.mal<-pglsSEyPagel(MalignancyPrevalence~female_maturity.months.,data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   summary(Fmaturity.mal)
@@ -1131,6 +1223,13 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=-.09, y=50.3, label = "10", size = 7)
 
   ggsave(filename='S10femmatmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs FemMat",nrow(cutData), r.v.fmaturitymal, p.v.fmaturitymal, ld.v.fmaturitymal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 ####Male Maturity neo
 cutData <- DataRum[,c(5,9,10,11,13,29,42),drop=FALSE] 
@@ -1154,7 +1253,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   Mmaturity.neo<-pglsSEyPagel(NeoplasiaPrevalence~male_maturity.months.,data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   summary(Mmaturity.neo)
@@ -1194,6 +1293,12 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=-0.74, y=83.8, label = "11", size = 7)
 
   ggsave(filename='S11malematneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs MaleMat",nrow(cutData), r.v.Mmaturityneo, p.v.Mmaturityneo, ld.v.Mmaturityneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #Male Maturity Mal
 cutData <- DataRum[,c(5,9,10,11,17,29,42),drop=FALSE] 
@@ -1217,7 +1322,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   Mmaturity.mal<-pglsSEyPagel(MalignancyPrevalence~male_maturity.months.,data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   summary(Mmaturity.mal)
@@ -1257,7 +1362,11 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=-.74, y=50.3, label = "12", size = 7)
   
   ggsave(filename='S12malematmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  SummaryStats <- rbind(SummaryStats, list("Mal vs MaleMat",nrow(cutData), r.v.Mmaturitymal, p.v.Mmaturitymal, ld.v.Mmaturitymal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 #Weaning Body Mass neo
 cutData <- DataRum[,c(5,9,10,11,13,37,42),drop=FALSE] 
 cutData[cutData < 0] <-NA
@@ -1280,7 +1389,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   weanw.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(weaning_weight.g.),data=cutData,
                           tree=pruned.tree,method="ML",se=SE)
   summary(weanw.neo)
@@ -1320,6 +1429,12 @@ if (nrow(cutData) > 10) {}
     annotate("text",  x=-.64, y=83.8, label = "13", size = 7)
   
   ggsave(filename='S13weanneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Wean",nrow(cutData), r.v.weanwneo, p.v.weanwneo, ld.v.weanwneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #Weaning Body Mass Mal
 cutData <- DataRum[,c(5,9,10,11,17,37,42),drop=FALSE] 
@@ -1342,7 +1457,7 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   weanw.mal<-pglsSEyPagel(MalignancyPrevalence~log10(weaning_weight.g.),data=cutData,
                           tree=pruned.tree,method="ML",se=SE)
   summary(weanw.mal)
@@ -1382,6 +1497,12 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=-.64, y=50.3, label = "14", size = 7)
   
   ggsave(filename='S14weanmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Wean",nrow(cutData), r.v.weanwmal, p.v.weanwmal, ld.v.weanwmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #Growth Rate Neo
 cutData <- DataRum[,c(5,9,10,11,13,39,42),drop=FALSE] 
@@ -1405,7 +1526,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   GrowthR.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(growth_rate.1.days.),data=cutData,
                             tree=pruned.tree,method="ML",se=SE)
   summary(GrowthR.neo)
@@ -1445,6 +1566,12 @@ if (nrow(cutData) > 10) {}
     annotate("text",x=-3.36, y=83.8, label = "15", size = 7)
   
   ggsave(filename='S15growneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs GrowthRate",nrow(cutData), r.v.GrowthRneo, p.v.GrowthRneo, ld.v.GrowthRneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #Growth Rate Mal
 cutData <- DataRum[,c(5,9,10,11,17,39,42),drop=FALSE] 
@@ -1468,7 +1595,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   GrowthR.mal<-pglsSEyPagel(MalignancyPrevalence~log10(growth_rate.1.days.),data=cutData,
                             tree=pruned.tree,method="ML",se=SE)
   summary(GrowthR.mal)
@@ -1508,6 +1635,12 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=-3.35, y=50.3, label = "16", size = 7)
   
   ggsave(filename='S16growmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs GrowthRate",nrow(cutData), r.v.GrowthRmal, p.v.GrowthRmal, ld.v.GrowthRmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
 
 #w+g
 
@@ -1534,7 +1667,7 @@ view(cutData)
 
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   wpl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation.months.)+log10(adult_weight.g.),data=cutData,
                         tree=pruned.tree,method="ML",se=SE)
   
@@ -1598,7 +1731,13 @@ if (nrow(cutData) > 10) {}
     annotate("text", x=.13, y=83.8, label = "19", size = 7)
   
   ggsave(filename='S19wgtgestneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
-
+  
+  #rbind adds a new row to a dataframe
+  #SummaryStats <- rbind(SummaryStats, list("Neo vs Gest+Weight",nrow(cutData), r.v.wpneo, p.v.wpneo, ld.v.wpneo))
+  
+  #Print stats
+  #print(SummaryStats)
+}
 
 
 #w+g mal
@@ -1625,7 +1764,7 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-if (nrow(cutData) > 10) {}
+if (nrow(cutData) > 9) {
   wpl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(Gestation.months.)+log10(adult_weight.g.),data=cutData,
                         tree=pruned.tree,method="ML",se=SE)
   
@@ -1684,6 +1823,12 @@ if (nrow(cutData) > 10) {}
   
   
   ggsave(filename='S20wgtgestmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  #SummaryStats <- rbind(SummaryStats, list("Mal vs Gest+Weight",nrow(cutData), r.v.wpmal, p.v.wpmal, ld.v.wpmal))
+  
+  #Print stats
+  #print(SummaryStats)
+}
 
 #g+l
 
@@ -1710,31 +1855,36 @@ view(cutData)
 
 
 #pgls model
-wppl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation.months.)+log10(max_longevity.months.),data=cutData,
-                      tree=pruned.tree,method="ML",se=SE)
-
-summary(wppl.neo)
-coef(wppl.neo)
-
-#grab r squared, lambda, and p values from summary 
-
-r.v.wpplneo <- R2(phy = pruned.tree,wppl.neo)
-r.v.wpplneo <- format(r.v.wpplneo[3])
-r.v.wpplneo <-signif(as.numeric(r.v.wpplneo), digits= 2)
-ld.v.wpplneo<- summary(wppl.neo)$modelStruct$corStruct
-ld.v.wpplneo <- signif(ld.v.wpplneo[1], digits = 2)
-p.v.wpplneo<-summary(wppl.neo)$tTable
-p.v.wpplneogest<-signif(p.v.wpplneo[2,4], digits = 3)
-p.v.wpplneolong<-signif(p.v.wpplneo[3,4], digits = 2)
-c.wpplneogest<-coef(wppl.neo)[2]
-c.wpplneolong<-coef(wppl.neo)[3]
-
-
-#combine p values for fisher p value
-pvalues<-c(p.v.wpplneogest,p.v.wpplneolong)
-
-combopwpplneo<-fisher(pvalues)
-
+if (nrow(cutData) > 9) {
+  wppl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation.months.)+log10(max_longevity.months.),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.neo)
+  coef(wppl.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplneo <- R2(phy = pruned.tree,wppl.neo)
+  r.v.wpplneo <- format(r.v.wpplneo[3])
+  r.v.wpplneo <-signif(as.numeric(r.v.wpplneo), digits= 2)
+  ld.v.wpplneo<- summary(wppl.neo)$modelStruct$corStruct
+  ld.v.wpplneo <- signif(ld.v.wpplneo[1], digits = 2)
+  p.v.wpplneo<-summary(wppl.neo)$tTable
+  p.v.wpplneogest<-signif(p.v.wpplneo[2,4], digits = 3)
+  p.v.wpplneolong<-signif(p.v.wpplneo[3,4], digits = 2)
+  c.wpplneogest<-coef(wppl.neo)[2]
+  c.wpplneolong<-coef(wppl.neo)[3]
+  
+  
+  #combine p values for fisher p value
+  pvalues<-c(p.v.wpplneogest,p.v.wpplneolong)
+  
+  combopwpplneo<-fisher(pvalues)
+  #rbind adds a new row to a dataframe
+  #SummaryStats <- rbind(SummaryStats, list("Neo vs Gest+Long",nrow(cutData), r.v.wpplneo, p.v.wpplneo, ld.v.wpplneo))
+  #Print stats
+  #print(SummaryStats)
+}  
 
 
 #g+l mal
@@ -1762,30 +1912,35 @@ view(cutData)
 
 
 #pgls model
-wppl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(Gestation.months.)+log10(max_longevity.months.),data=cutData,
-                      tree=pruned.tree,method="ML",se=SE)
-
-summary(wppl.mal)
-
-#grab r squared, lambda, and p values from summary 
-
-r.v.wpplmal <- R2(phy = pruned.tree,wppl.mal)
-r.v.wpplmal <- format(r.v.wpplmal[3])
-r.v.wpplmal <-signif(as.numeric(r.v.wpplmal), digits= 2)
-ld.v.wpplmal<- summary(wppl.mal)$modelStruct$corStruct
-ld.v.wpplmal <- signif(ld.v.wpplmal[1], digits = 2)
-p.v.wpplmal<-summary(wppl.mal)$tTable
-p.v.wpplmalgest<-signif(p.v.wpplmal[2,4], digits = 3)
-p.v.wpplmallong<-signif(p.v.wpplmal[3,4], digits = 2)
-c.wpplmalgest<-coef(wppl.mal)[2]
-c.wpplmallong<-coef(wppl.mal)[3]
-
-
-#combine p values for fisher p value
-pvalues<-c(p.v.wpplmalgest,p.v.wpplmallong)
-
-combopwpplmal<-fisher(pvalues)
-
+if (nrow(cutData) > 9) {
+  wppl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(Gestation.months.)+log10(max_longevity.months.),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplmal <- R2(phy = pruned.tree,wppl.mal)
+  r.v.wpplmal <- format(r.v.wpplmal[3])
+  r.v.wpplmal <-signif(as.numeric(r.v.wpplmal), digits= 2)
+  ld.v.wpplmal<- summary(wppl.mal)$modelStruct$corStruct
+  ld.v.wpplmal <- signif(ld.v.wpplmal[1], digits = 2)
+  p.v.wpplmal<-summary(wppl.mal)$tTable
+  p.v.wpplmalgest<-signif(p.v.wpplmal[2,4], digits = 3)
+  p.v.wpplmallong<-signif(p.v.wpplmal[3,4], digits = 2)
+  c.wpplmalgest<-coef(wppl.mal)[2]
+  c.wpplmallong<-coef(wppl.mal)[3]
+  
+  
+  #combine p values for fisher p value
+  pvalues<-c(p.v.wpplmalgest,p.v.wpplmallong)
+  
+  combopwpplmal<-fisher(pvalues)
+  #rbind adds a new row to a dataframe
+  #SummaryStats <- rbind(SummaryStats, list("Mal vs Gest+Long",nrow(cutData), r.v.wpplmal, p.v.wpplmal, ld.v.wpplmal))
+  #Print stats
+  #print(SummaryStats)
+}
 
 #adult weight and gest length model
 
@@ -1808,58 +1963,64 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-wgt.gest<-pglsSEyPagel(Gestation.months.~log10(adult_weight.g.),data=cutData,tree=pruned.tree,se=SE,method = "ML")
-
-summary(wgt.gest) 
-
-
-#grab r squared, lambda, and p values from summary 
-r.v.wgt.gest <- R2(phy = pruned.tree,wgt.gest)
-r.v.wgt.gest <- format(r.v.wgt.gest[3])
-r.v.wgt.gest <-signif(as.numeric(r.v.wgt.gest), digits= 2)
-ld.v.wgt.gest<- summary(wgt.gest)$modelStruct$corStruct
-ld.v.wgt.gest <- signif(ld.v.wgt.gest[1], digits = 2)
-p.v.wgt.gest<-summary(wgt.gest)$tTable
-p.v.wgt.gest<-signif(p.v.wgt.gest[2,4], digits = 2)
-
-# Extract model residuals
-residuals <- resid(wgt.gest)
-
-# Add residuals to your data frame
-cutData$residuals <- residuals
-
-# Standard deviation of residuals
-std_residuals <- sd(residuals)
-
-# Identify outliers (e.g., residuals greater than 2 standard deviations from zero)
-cutData$outlier_status <- ifelse(cutData$residuals > 1.5 * std_residuals, "High Outlier",
-                                 ifelse(cutData$residuals < -1.5 * std_residuals, "Low Outlier", "Normal"))
-
-#plot
-wgtgest<-ggplot(cutData, aes(y=Gestation.months., x=log10(adult_weight.g.)))+
-  scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ),)+
-  geom_abline() +
-  theme_cowplot(12)+
-  theme(axis.title = element_text(size = 18))+
-  ylab("Gestation length") +
-  xlab("(log10) Adult Body Mass (g)") +
-  geom_point(aes(colour= Clade, size = RecordsWithDenominators)) +
-  scale_size(name   = "Total Necropsies",
-             breaks = c(20,100,200,300,477),
-             labels =  c(20,100,200,300,477))+
-  geom_text_repel(data = subset(cutData, outlier_status != "Normal"), aes(label = common_name), 
-                  size = 5, max.overlaps = Inf) +
-  guides(colour = guide_legend(override.aes = list(size=3))) +
-  labs(title = "Gestation v. Adult Body Mass",
-       subtitle =bquote(p-value:.(p.v.wgt.gest)~R^2:.(r.v.wgt.gest)~Lambda:.(ld.v.wgt.gest))) +
-  theme(
-    plot.title = element_text(size = 20, face = "bold")) +
-  theme(legend.position = "bottom")+
-  labs(colour="Clade", size="Total Necropsies")
-
-
-wgtgest
-
+if (nrow(cutData) > 9) {
+  wgt.gest<-pglsSEyPagel(Gestation.months.~log10(adult_weight.g.),data=cutData,tree=pruned.tree,se=SE,method = "ML")
+  
+  summary(wgt.gest) 
+  
+  
+  #grab r squared, lambda, and p values from summary 
+  r.v.wgt.gest <- R2(phy = pruned.tree,wgt.gest)
+  r.v.wgt.gest <- format(r.v.wgt.gest[3])
+  r.v.wgt.gest <-signif(as.numeric(r.v.wgt.gest), digits= 2)
+  ld.v.wgt.gest<- summary(wgt.gest)$modelStruct$corStruct
+  ld.v.wgt.gest <- signif(ld.v.wgt.gest[1], digits = 2)
+  p.v.wgt.gest<-summary(wgt.gest)$tTable
+  p.v.wgt.gest<-signif(p.v.wgt.gest[2,4], digits = 2)
+  
+  # Extract model residuals
+  residuals <- resid(wgt.gest)
+  
+  # Add residuals to your data frame
+  cutData$residuals <- residuals
+  
+  # Standard deviation of residuals
+  std_residuals <- sd(residuals)
+  
+  # Identify outliers (e.g., residuals greater than 2 standard deviations from zero)
+  cutData$outlier_status <- ifelse(cutData$residuals > 1.5 * std_residuals, "High Outlier",
+                                   ifelse(cutData$residuals < -1.5 * std_residuals, "Low Outlier", "Normal"))
+  
+  #plot
+  wgtgest<-ggplot(cutData, aes(y=Gestation.months., x=log10(adult_weight.g.)))+
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ),)+
+    geom_abline() +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Gestation length") +
+    xlab("(log10) Adult Body Mass (g)") +
+    geom_point(aes(colour= Clade, size = RecordsWithDenominators)) +
+    scale_size(name   = "Total Necropsies",
+               breaks = c(20,100,200,300,477),
+               labels =  c(20,100,200,300,477))+
+    geom_text_repel(data = subset(cutData, outlier_status != "Normal"), aes(label = common_name), 
+                    size = 5, max.overlaps = Inf) +
+    guides(colour = guide_legend(override.aes = list(size=3))) +
+    labs(title = "Gestation v. Adult Body Mass",
+         subtitle =bquote(p-value:.(p.v.wgt.gest)~R^2:.(r.v.wgt.gest)~Lambda:.(ld.v.wgt.gest))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Clade", size="Total Necropsies")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Weight vs GestLength",nrow(cutData), r.v.wgt.gest, p.v.wgt.gest, ld.v.wgt.gest))
+  #Print stats
+  print(SummaryStats)
+} 
+  
+  wgtgest
+  
 
 
 
@@ -1884,46 +2045,52 @@ SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
 view(cutData)
 
 #pgls model
-long.gest<-pglsSEyPagel(Gestation.months.~max_longevity.months.,data=cutData,tree=pruned.tree,se=SE,method = "ML")
+if (nrow(cutData) > 9) {
+  long.gest<-pglsSEyPagel(Gestation.months.~max_longevity.months.,data=cutData,tree=pruned.tree,se=SE,method = "ML")
+  
+  summary(long.gest) 
+  
+  
+  #grab r squared, lambda, and p values from summary 
+  r.v.long.gest <- R2(phy = pruned.tree,long.gest)
+  r.v.long.gest <- format(r.v.long.gest[3])
+  r.v.long.gest <-signif(as.numeric(r.v.long.gest), digits= 2)
+  ld.v.long.gest<- summary(long.gest)$modelStruct$corStruct
+  ld.v.long.gest <- signif(ld.v.long.gest[1], digits = 2)
+  p.v.long.gest<-summary(long.gest)$tTable
+  p.v.long.gest<-signif(p.v.long.gest[2,4], digits = 2)
+  
+  
+  
+  #plot
+  longgest<-ggplot(cutData, aes(y=Gestation.months., x=max_longevity.months.))+
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ),)+
+    geom_abline(slope = long.gest$coefficients[2], intercept = long.gest$coefficients[1]) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Gestation length") +
+    xlab("(log10) Adult Body Mass (g)") +
+    geom_point(aes(colour= Clade, size = RecordsWithDenominators)) +
+    scale_size(name   = "Total Necropsies",
+               breaks = c(20,100,200,300,477),
+               labels =  c(20,100,200,300,477))+
+    geom_text_repel(aes(label=ifelse( Gestation.months. > 15,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=3))) +
+    labs(title = "Gestation v. Adult Body Mass",
+         subtitle =bquote(p-value:.(p.v.long.gest)~R^2:.(r.v.long.gest)~Lambda:.(ld.v.long.gest))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Clade", size="Total Necropsies")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Longevity vs GestLength",nrow(cutData), r.v.long.gest, p.v.long.gest, ld.v.long.gest))
+  #Print stats
+  print(SummaryStats)
+}  
+  
+  longgest
 
-summary(long.gest) 
-
-
-#grab r squared, lambda, and p values from summary 
-r.v.long.gest <- R2(phy = pruned.tree,long.gest)
-r.v.long.gest <- format(r.v.long.gest[3])
-r.v.long.gest <-signif(as.numeric(r.v.long.gest), digits= 2)
-ld.v.long.gest<- summary(long.gest)$modelStruct$corStruct
-ld.v.long.gest <- signif(ld.v.long.gest[1], digits = 2)
-p.v.long.gest<-summary(long.gest)$tTable
-p.v.long.gest<-signif(p.v.long.gest[2,4], digits = 2)
-
-
-
-#plot
-longgest<-ggplot(cutData, aes(y=Gestation.months., x=max_longevity.months.))+
-  scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ),)+
-  geom_abline(slope = long.gest$coefficients[2], intercept = long.gest$coefficients[1]) +
-  theme_cowplot(12)+
-  theme(axis.title = element_text(size = 18))+
-  ylab("Gestation length") +
-  xlab("(log10) Adult Body Mass (g)") +
-  geom_point(aes(colour= Clade, size = RecordsWithDenominators)) +
-  scale_size(name   = "Total Necropsies",
-             breaks = c(20,100,200,300,477),
-             labels =  c(20,100,200,300,477))+
-  geom_text_repel(aes(label=ifelse( Gestation.months. > 15,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
-  guides(colour = guide_legend(override.aes = list(size=3))) +
-  labs(title = "Gestation v. Adult Body Mass",
-       subtitle =bquote(p-value:.(p.v.long.gest)~R^2:.(r.v.long.gest)~Lambda:.(ld.v.long.gest))) +
-  theme(
-    plot.title = element_text(size = 20, face = "bold")) +
-  theme(legend.position = "bottom")+
-  labs(colour="Clade", size="Total Necropsies")
-
-
-longgest
-
-
-
-
+  #Write SummaryStats to CSV
+  colnames(SummaryStats) = c("Iteration Name","Data Points","R2 value","P value","Lambda")
+  write.csv(SummaryStats, "SummaryStats.csv",row.names = FALSE)
