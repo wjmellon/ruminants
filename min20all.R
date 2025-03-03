@@ -75,6 +75,9 @@ DataRum <- subset(Data, Family == "Bovidae" | Family == "Cervidae" | Family == "
 
 #Data frame for summary stats
 SummaryStats = data.frame(matrix(nrow=0, ncol=5),stringsAsFactors=FALSE)
+#Data frame for summary stats
+SummaryStats2 = data.frame(matrix(nrow=0, ncol=11),stringsAsFactors=FALSE)
+
 
 #adult weight models
 #adult weight neo
@@ -1642,6 +1645,7 @@ if (nrow(cutData) > 9) {
   print(SummaryStats)
 }
 
+#START OF MULTIVARIABLE TESTS
 #w+g
 
 cutData <- DataRum[,c(5,9,10,11,13,38,30,42),drop=FALSE] 
@@ -1703,7 +1707,8 @@ if (nrow(cutData) > 9) {
   # Print which coefficients are significant
   print(significant_effects)
   
-  
+  #Do combined Pvalue with fischer method
+  combopwpplneo<-fisher(p.values)
   
   ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(adult_weight.g.)+log10(Gestation.months.))) + 
     scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
@@ -1733,10 +1738,10 @@ if (nrow(cutData) > 9) {
   ggsave(filename='S19wgtgestneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
   
   #rbind adds a new row to a dataframe
-  #SummaryStats <- rbind(SummaryStats, list("Neo vs Gest+Weight",nrow(cutData), r.v.wpneo, p.v.wpneo, ld.v.wpneo))
+  SummaryStats2 <- rbind(SummaryStats2, list("Neo vs Gest+Weight","Gestation","AdultWeight",nrow(cutData), r.v.wpneo, ld.v.wpneo, p.v.wpneogest, p.v.wpneowgt,adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplneo[1])))
   
   #Print stats
-  #print(SummaryStats)
+  print(SummaryStats2)
 }
 
 
@@ -1779,13 +1784,13 @@ if (nrow(cutData) > 9) {
   ld.v.wpmal <- signif(ld.v.wpmal[1], digits = 2)
   p.v.wpmal<-summary(wpl.mal)$tTable
   p.v.wpgmalgest<-signif(p.v.wpmal[2,4], digits = 3)
-  p.v.wpgmallong<-signif(p.v.wpmal[3,4], digits = 2)
+  p.v.wpgmalwgt<-signif(p.v.wpmal[3,4], digits = 2)
   c.wpplmalgest<-coef(wpl.mal)[2]
-  c.wpplmallong<-coef(wpl.mal)[3]
+  c.wpplmalwgt<-coef(wpl.mal)[3]
   
   
   # Assuming you have a vector of p-values from multiple tests
-  p.values <- c(p.v.wpgmalgest,p.v.wpgmallong)
+  p.values <- c(p.v.wpgmalgest,p.v.wpgmalwgt)
   
   # Use the p.adjust function with the BH method to adjust the p-values
   adjusted.p.values <- p.adjust(p.values, method = "BH")
@@ -1796,6 +1801,8 @@ if (nrow(cutData) > 9) {
   # Print which coefficients are significant
   print(significant_effects)
   
+  #Do combined Pvalue with fischer method
+  combopwpplmal<-fisher(p.values)
   
   ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(Gestation.months.)+log10(adult_weight.g.))) +
     scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
@@ -1824,10 +1831,10 @@ if (nrow(cutData) > 9) {
   
   ggsave(filename='S20wgtgestmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
   #rbind adds a new row to a dataframe
-  #SummaryStats <- rbind(SummaryStats, list("Mal vs Gest+Weight",nrow(cutData), r.v.wpmal, p.v.wpmal, ld.v.wpmal))
+  SummaryStats2 <- rbind(SummaryStats2, list("Mal vs Gest+Weight","Gestation","AdultWeight",nrow(cutData), r.v.wpmal, ld.v.wpmal, p.v.wpgmalgest, p.v.wpgmalwgt, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplmal[1])))
   
   #Print stats
-  #print(SummaryStats)
+  print(SummaryStats2)
 }
 
 #g+l
@@ -1874,16 +1881,26 @@ if (nrow(cutData) > 9) {
   p.v.wpplneolong<-signif(p.v.wpplneo[3,4], digits = 2)
   c.wpplneogest<-coef(wppl.neo)[2]
   c.wpplneolong<-coef(wppl.neo)[3]
+
+  # Assuming you have a vector of p-values from multiple tests
+  p.values <- c(p.v.wpplneogest,p.v.wpplneolong)
   
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
   
-  #combine p values for fisher p value
-  pvalues<-c(p.v.wpplneogest,p.v.wpplneolong)
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
   
-  combopwpplneo<-fisher(pvalues)
+  # Print which coefficients are significant
+  print(significant_effects)
+  
+  #Do combined Pvalue with fischer method
+  combopwpplneo<-fisher(p.values)
+  
   #rbind adds a new row to a dataframe
-  #SummaryStats <- rbind(SummaryStats, list("Neo vs Gest+Long",nrow(cutData), r.v.wpplneo, p.v.wpplneo, ld.v.wpplneo))
+  SummaryStats2 <- rbind(SummaryStats2, list("Neo vs Gest+Long","Gestation","Longevity",nrow(cutData), r.v.wpneo, ld.v.wpneo, p.v.wpplneogest,p.v.wpplneolong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplneo[1])))
   #Print stats
-  #print(SummaryStats)
+  print(SummaryStats2)
 }  
 
 
@@ -1931,15 +1948,22 @@ if (nrow(cutData) > 9) {
   c.wpplmalgest<-coef(wppl.mal)[2]
   c.wpplmallong<-coef(wppl.mal)[3]
   
-  
   #combine p values for fisher p value
-  pvalues<-c(p.v.wpplmalgest,p.v.wpplmallong)
+  p.values<-c(p.v.wpplmalgest,p.v.wpplmallong)
   
-  combopwpplmal<-fisher(pvalues)
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  #Do combined Pvalue with fischer method
+  combopwpplmal<-fisher(p.values)
+  
   #rbind adds a new row to a dataframe
-  #SummaryStats <- rbind(SummaryStats, list("Mal vs Gest+Long",nrow(cutData), r.v.wpplmal, p.v.wpplmal, ld.v.wpplmal))
+  SummaryStats2 <- rbind(SummaryStats2, list("Mal vs Gest+Long","Gestation","Longevity",nrow(cutData), r.v.wpmal, ld.v.wpmal, p.v.wpplmalgest, p.v.wpplmallong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplmal[1])))
   #Print stats
-  #print(SummaryStats)
+  print(SummaryStats2)
 }
 
 #adult weight and gest length model
@@ -2094,3 +2118,6 @@ if (nrow(cutData) > 9) {
   #Write SummaryStats to CSV
   colnames(SummaryStats) = c("Iteration Name","Data Points","R2 value","P value","Lambda")
   write.csv(SummaryStats, "SummaryStats.csv",row.names = FALSE)
+  #Write SummaryStats to CSV
+  colnames(SummaryStats2) = c("Iteration Name","Var1","Var2","Data Points","R2 value","Lambda","Pvalue1","Pvalue2","AdjPval1","AdjPval2","ComboP")
+  write.csv(SummaryStats2, "SummaryStats2.csv",row.names = FALSE)
