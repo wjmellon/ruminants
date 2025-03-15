@@ -1966,6 +1966,255 @@ if (nrow(cutData) > 9) {
   print(SummaryStats2)
 }
 
+#bw+long neo -Francesca's code
+
+cutData <- DataRum[,c(5,9,10,11,13,36,40,42),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min20Fixed516.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wppl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(birth_weight.g.)+log10(max_longevity.months.),data=cutData,
+                         tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.neo)
+  coef(wppl.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplneo <- R2(phy = pruned.tree,wppl.neo)
+  r.v.wpplneo <- format(r.v.wpplneo[3])
+  r.v.wpplneo <-signif(as.numeric(r.v.wpplneo), digits= 2)
+  ld.v.wpplneo<- summary(wppl.neo)$modelStruct$corStruct
+  ld.v.wpplneo <- signif(ld.v.wpplneo[1], digits = 2)
+  p.v.wpplneo<-summary(wppl.neo)$tTable
+  p.v.wpplneobw<-signif(p.v.wpplneo[2,4], digits = 3)
+  p.v.wpplneolong<-signif(p.v.wpplneo[3,4], digits = 2)
+  c.wpplneobw<-coef(wppl.neo)[2]
+  c.wpplneolong<-coef(wppl.neo)[3]
+  
+  # Assuming you have a vector of p-values from multiple tests
+  p.values <- c(p.v.wpplneobw,p.v.wpplneolong)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  # Print which coefficients are significant
+  print(significant_effects)
+  
+  #Do combined Pvalue with fischer method
+  combopwpplneo<-fisher(p.values)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(birth_weight.g.)+log10(max_longevity.months.))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c((min(log10(cutData$max_longevity.months.)+log10(cutData$birth_weight.g.))),max(log10(cutData$max_longevity.months.)+log10(cutData$birth_weight.g.))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(wppl.neo)[1]*100, slope =  coef(wppl.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Max Longevity(mo) + Birth Weight(g)") +
+    geom_point(aes(colour= Clade, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Birth Weight+Max Longevity",  
+         subtitle =bquote(p-value:.(p.v.wpplneo)~R^2:.(r.v.wpplneo)~Lambda:.(ld.v.wpplneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Clade", size="Total Necropsies")+
+    annotate("text", x=.13, y=50.3, label = "20", size = 7)
+  
+  
+  #ggsave(filename='S20bwmaxlongneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Neo vs BirthWeight+Long","Birth Weight","Longevity",nrow(cutData), r.v.wpneo, ld.v.wpneo, p.v.wpplneobw,p.v.wpplneolong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplneo[1])))
+  #Print stats
+  print(SummaryStats2)
+}  
+
+
+#bw+long mal
+
+
+cutData <- DataRum[,c(5,9,10,11,17,36,40,42),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min20Fixed516.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wppl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(birth_weight.g.)+log10(max_longevity.months.),data=cutData,
+                         tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplmal <- R2(phy = pruned.tree,wppl.mal)
+  r.v.wpplmal <- format(r.v.wpplmal[3])
+  r.v.wpplmal <-signif(as.numeric(r.v.wpplmal), digits= 2)
+  ld.v.wpplmal<- summary(wppl.mal)$modelStruct$corStruct
+  ld.v.wpplmal <- signif(ld.v.wpplmal[1], digits = 2)
+  p.v.wpplmal<-summary(wppl.mal)$tTable
+  p.v.wpplmalbw<-signif(p.v.wpplmal[2,4], digits = 3)
+  p.v.wpplmallong<-signif(p.v.wpplmal[3,4], digits = 2)
+  c.wpplmalbw<-coef(wppl.mal)[2]
+  c.wpplmallong<-coef(wppl.mal)[3]
+  
+  #combine p values for fisher p value
+  p.values<-c(p.v.wpplmalbw,p.v.wpplmallong)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  #Do combined Pvalue with fischer method
+  combopwpplmal<-fisher(p.values)
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Mal vs BirthWeight+Long","Birth Weight","Longevity",nrow(cutData), r.v.wpmal, ld.v.wpmal, p.v.wpplmalbw, p.v.wpplmallong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplmal[1])))
+  #Print stats
+  print(SummaryStats2)
+}
+
+#Neo g+l
+cutData <- DataRum[,c(5,9,10,11,13,40,30,42),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min20Fixed516.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wppl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation.months.)+log10(max_longevity.months.),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.neo)
+  coef(wppl.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplneo <- R2(phy = pruned.tree,wppl.neo)
+  r.v.wpplneo <- format(r.v.wpplneo[3])
+  r.v.wpplneo <-signif(as.numeric(r.v.wpplneo), digits= 2)
+  ld.v.wpplneo<- summary(wppl.neo)$modelStruct$corStruct
+  ld.v.wpplneo <- signif(ld.v.wpplneo[1], digits = 2)
+  p.v.wpplneo<-summary(wppl.neo)$tTable
+  p.v.wpplneogest<-signif(p.v.wpplneo[2,4], digits = 3)
+  p.v.wpplneolong<-signif(p.v.wpplneo[3,4], digits = 2)
+  c.wpplneogest<-coef(wppl.neo)[2]
+  c.wpplneolong<-coef(wppl.neo)[3]
+
+  # Assuming you have a vector of p-values from multiple tests
+  p.values <- c(p.v.wpplneogest,p.v.wpplneolong)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  # Print which coefficients are significant
+  print(significant_effects)
+  
+  #Do combined Pvalue with fischer method
+  combopwpplneo<-fisher(p.values)
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Neo vs Gest+Long","Gestation","Longevity",nrow(cutData), r.v.wpneo, ld.v.wpneo, p.v.wpplneogest,p.v.wpplneolong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplneo[1])))
+  #Print stats
+  print(SummaryStats2)
+}  
+
+
+cutData <- DataRum[,c(5,9,10,11,17,36,40,42),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min20Fixed516.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+
+
+
+#Start of reference functions.
 #adult weight and gest length model
 
 cutData <- DataRum[,c(5,9,10,11,13,38,30,42),drop=FALSE] 
