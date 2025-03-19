@@ -1,0 +1,7 @@
+"Iteration Name","Var1","Var2","Data Points","R2 value","Lambda","Pvalue1","Pvalue2","AdjPval1","AdjPval2","ComboP"
+"Neo vs Gest+Weight","Gestation","AdultWeight",17,0.0047,6.6e-05,0.876,0.92,0.92,0.92,0.979814000705987
+"Mal vs Gest+Weight","Gestation","AdultWeight",17,0.05,6.6e-05,0.685,0.41,0.685,0.685,0.637511121177038
+"Neo vs Gest+Long","Gestation","Longevity",17,0.0047,6.6e-05,0.543,0.021,0.543,0.042,0.0624186399598998
+"Mal vs Gest+Long","Gestation","Longevity",17,0.05,6.6e-05,0.368,0.04,0.368,0.08,0.0768170289988303
+"Neo vs BirthWeight+Long","Birth Weight","Longevity",15,0.0047,6.6e-05,0.286,0.022,0.286,0.044,0.0381828528405022
+"Mal vs BirthWeight+Long","Birth Weight","Longevity",15,0.05,6.6e-05,0.00903,0.019,0.01806,0.019,0.00165917098109457

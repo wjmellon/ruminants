@@ -1,0 +1,17 @@
+"Iteration Name","Data Points","R2 value","P value","Lambda"
+"Neo vs AdultWeight",17,-9.5e-05,0.99,6.6e-05
+"Mal vs AdultWeight",17,0.039,0.449,6.6e-05
+"Neo vs Gest",17,0.0024,0.91,6.6e-05
+"Mal vs Gest",17,0.0014,0.836,6.6e-05
+"Neo vs Longevity",17,0.33,0.015,6.6e-05
+"Mal vs Longevity",17,0.22,0.0548,6.6107e-05
+"Neo vs Masslong",17,0.01,0.685,6.6e-05
+"Mal vs Weight",17,0.0084,0.731,6.6e-05
+"Neo vs LitYear",14,0.01,0.703,6.6e-05
+"Mal vs LitYear",14,0.0053,0.804,6.6e-05
+"Neo vs FemMat",17,-5e-04,0.881,6.6e-05
+"Mal vs FemMat",17,0.0013,0.902,6.6e-05
+"Neo vs MaleMat",16,0.061,0.356,6.6e-05
+"Mal vs MaleMat",16,0.00028,0.954,6.6e-05
+"Weight vs GestLength",17,0.68,0.0085,0.89
+"Longevity vs GestLength",17,0.59,0.22,1

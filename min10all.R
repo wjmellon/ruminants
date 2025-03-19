@@ -1,0 +1,2373 @@
+library(nlme)
+#library(rms)
+library(phytools)
+library(geiger)
+library(caper)
+library(tidyverse)
+library(cowplot)
+library(ggrepel)
+library(ggsci)
+library(patchwork)
+library(poolr)
+library(rr2)
+#make sure to run all of this before you get to work.
+#pgls sey base (just run all of this)
+modPgls.SEy = function (model, data, corClass = corBrownian, tree, se = NULL, 
+                        method = c("REML", "ML"), interval = c(0, 1000), corClassValue=1, sig2e=NULL, ...) 
+{
+  Call <- match.call()
+  corfunc <- corClass
+  spp <- rownames(data)
+  data <- cbind(data, spp)
+  if (is.null(se)) 
+    se <- setNames(rep(0, Ntip(tree)), tree$tip.label)[spp]
+  else se <- se[spp]
+  
+  lk <- function(sig2e, data, tree, model, ve, corfunc, spp) {
+    tree$edge.length <- tree$edge.length * sig2e
+    ii <- sapply(1:Ntip(tree), function(x, e) which(e == 
+                                                      x), e = tree$edge[, 2])
+    tree$edge.length[ii] <- tree$edge.length[ii] + ve[tree$tip.label]
+    vf <- diag(vcv(tree))[spp]
+    w <- varFixed(~vf)
+    COR <- corfunc(corClassValue, tree, form = ~spp, ...)
+    fit <- gls(model, data = cbind(data, vf), correlation = COR, 
+               method = method, weights = w)
+    -logLik(fit)
+  }
+  
+  if (is.null(sig2e)) {
+    fit <- optimize(lk, interval = interval, data = data, tree = tree, 
+                    model = model, ve = se^2, corfunc = corfunc, spp = spp)
+    sig2e=fit$minimum
+  }
+  
+  tree$edge.length <- tree$edge.length * sig2e
+  ii <- sapply(1:Ntip(tree), function(x, e) which(e == x), 
+               e = tree$edge[, 2])
+  tree$edge.length[ii] <- tree$edge.length[ii] + se[tree$tip.label]^2
+  vf <- diag(vcv(tree))[spp]
+  w <- varFixed(~vf)
+  obj <- gls(model, data = cbind(data, vf), correlation = corfunc(corClassValue, 
+                                                                  tree, form = ~spp, ...), weights = w, method = method)
+  obj$call <- Call
+  obj$sig2e <- sig2e
+  obj
+}
+
+#Internal function
+pglsSEyPagelToOptimizeLambda=function(lambda,model,data,tree,...) {
+  -logLik(modPgls.SEy(model=model,data=data,tree=tree,corClassValue=lambda,corClass=corPagel,fixed=T,...)) #Returns -logLikelihood of the pgls.SEy model with lambda fixed to the value of the lambda argument. sig2e will be optimized within modPgls.SEy unless given as an argument here
+}
+
+#Function intended for users
+pglsSEyPagel=function(model, data, tree, lambdaInterval=c(0,1),...){
+  optimizedModel=optimize(pglsSEyPagelToOptimizeLambda,lambdaInterval,model=model,data=data,tree=tree,...) #Optimizes lambda in the lambdaInterval using the pglsSEyPagelToOptimizeLambda function
+  return(modPgls.SEy(model=model,data=data,tree=tree,corClass=corPagel,fixed=T,corClassValue=optimizedModel$minimum,...)) #Returns the final model fit
+}
+
+
+#read data
+Data <- read.csv("min10ruminants.csv")
+View(Data)
+#Filter out each family in ruminants
+DataRum <- subset(Data, Family == "Bovidae" | Family == "Cervidae" | Family == "Giraffidae" | Family == "Camelidae" | Family == "Ovidae" | Family == "Antilocapridae")
+
+#Data frame for summary stats
+SummaryStats = data.frame(matrix(nrow=0, ncol=5),stringsAsFactors=FALSE)
+#Data frame for summary stats
+SummaryStats2 = data.frame(matrix(nrow=0, ncol=11),stringsAsFactors=FALSE)
+
+DataRum$SE_simple<-1/sqrt(DataRum$RecordsWithDenominators)
+
+#adult weight models
+#adult weight neo
+#Modified Cutdata to only work on ruminants data set
+cutData <- DataRum[,c(5,9,10,11,13,39,48),drop=FALSE] 
+#cutData <- DataRum[,c(5,9,10,11,13,38,48),drop=FALSE] 
+cutData[cutData$adult_weight == -1, ] <-NA
+cutData <- na.omit(cutData)
+# if (nrow(cutData) != 0) {
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies<-cutData$Species
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  adult.weight.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(adult_weight),data=cutData,tree=pruned.tree,se=SE,method = "ML")
+  
+  summary(adult.weight.neo) 
+  
+  
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.adult.weight.neo <- R2(phy = pruned.tree,adult.weight.neo)
+  r.v.adult.weight.neo <- format(r.v.adult.weight.neo[3])
+  r.v.adult.weight.neo <-signif(as.numeric(r.v.adult.weight.neo), digits= 2)
+  ld.v.adult.weight.neo<- summary(adult.weight.neo)$modelStruct$corStruct
+  ld.v.adult.weight.neo <- signif(ld.v.adult.weight.neo[1], digits = 2)
+  p.v.adult.weight.neo<-summary(adult.weight.neo)$tTable
+  p.v.adult.weight.neo<-signif(p.v.adult.weight.neo[2,4], digits = 2)
+  
+  
+  #plot
+  wgtneo<-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(adult_weight)))+
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ),)+
+    scale_y_continuous(
+      limits = c(0,75),
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(adult.weight.neo)[1]*100, slope =  coef(adult.weight.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Adult Body Mass (g)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    scale_size(name   = "Total Necropsies",
+               breaks = c(20,100,200,300,477),
+               labels =  c(20,100,200,300,477))+
+    geom_text_repel(aes(label=ifelse( NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=3))) +
+    labs(title = "A")+
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Class", size="Total Necropsies")
+  
+  #ggsave(filename='wgtneol.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs AdultWeight",nrow(cutData), r.v.adult.weight.neo, p.v.adult.weight.neo, ld.v.adult.weight.neo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#adult weight mal
+cutData <- DataRum[,c(5,9,10,11,17,39,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  adult.weight.mal<-pglsSEyPagel(MalignancyPrevalence~log10(adult_weight),data=cutData,
+                                 tree=pruned.tree,se=SE,method="ML")
+  summary(adult.weight.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.adult.weight.mal <- R2(phy = pruned.tree,adult.weight.mal)
+  r.v.adult.weight.mal <- format(r.v.adult.weight.mal[3])
+  r.v.adult.weight.mal <-signif(as.numeric(r.v.adult.weight.mal), digits= 2)
+  ld.v.adult.weight.mal<- summary(adult.weight.mal)$modelStruct$corStruct
+  ld.v.adult.weight.mal <- signif(ld.v.adult.weight.mal[1], digits= 2)
+  p.v.adult.weight.mal<-summary(adult.weight.mal)$tTable
+  p.v.adult.weight.mal<-signif(p.v.adult.weight.mal[2,4], digits = 3)
+  
+  #remove limits from scale y continous, add last two lines with label
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(adult_weight)))+
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      limits = c(0,75),
+      breaks = c(0, 25,45,75),
+      labels = c(0, 25,45,75))+
+    coord_cartesian(xlim = c(log10(min(cutData$adult_weight)),log10(max(cutData$adult_weight))),
+                    ylim = c(0,75),clip = "off")+
+    geom_abline(intercept = coef(adult.weight.mal)[1]*100, slope =  coef(adult.weight.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Adult Body Mass (g)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    scale_size(name   = "Total Necropsies",
+               breaks = c(20,100,200,300,477),
+               labels =  c(20,100,200,300,477))+
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    labs(title = "A.1")+
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    annotate("text", x=.42, y=50.3, label = "1", size = 7)
+  
+  
+  #ggsave(filename='S1wgtmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs AdultWeight",nrow(cutData), r.v.adult.weight.mal, p.v.adult.weight.mal, ld.v.adult.weight.mal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#gestation models
+#gestation neo
+cutData <- DataRum[,c(5,9,10,11,13,34,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  gestation.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation),data=cutData,
+                              tree=pruned.tree,method="ML",se=SE)
+  
+  summary(gestation.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.gestneo <- R2(phy = pruned.tree,gestation.neo)
+  r.v.gestneo <- format(r.v.gestneo[3])
+  r.v.gestneo<-signif(as.numeric(r.v.gestneo), digits= 2)
+  ld.v.gestneo<- summary(gestation.neo)$modelStruct$corStruct
+  ld.v.gestneo <- signif(ld.v.gestneo[1], digits = 2)
+  p.v.gestneo<-summary(gestation.neo)$tTable
+  p.v.gestneo<-signif(p.v.gestneo[2,4], digits = 3)
+  
+  gestneo<-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(Gestation))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      limits = c(0,75),
+      breaks = c(0, 25,45,75),
+      labels = c(0, 25,45,75))+
+    geom_abline(intercept = coef(gestation.neo)[1]*100, slope =  coef(gestation.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Gestation") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=5)))+
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    labs(title="A")
+  
+  #ggsave(filename='S2gestneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Gest",nrow(cutData), r.v.gestneo, p.v.gestneo, ld.v.gestneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#gestation mal
+cutData <- DataRum[,c(5,9,10,11,17,34,48),drop=FALSE] 
+cutData[cutData$Gestation < 0, ] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  gestation.mal<-pglsSEyPagel(MalignancyPrevalence~log10(Gestation),data=cutData,
+                              tree=pruned.tree,method="ML",se=SE)
+  summary(gestation.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.gestmal <- R2(phy = pruned.tree,gestation.mal)
+  r.v.gestmal <- format(r.v.gestmal[3])
+  r.v.gestmal<-signif(as.numeric(r.v.gestmal), digits= 2)
+  ld.v.gestmal<- summary(gestation.mal)$modelStruct$corStruct
+  ld.v.gestmal<- signif(ld.v.gestmal[1], digits = 2)
+  p.v.gestmal<-summary(gestation.mal)$tTable
+  p.v.gestmal<-signif(p.v.gestmal[2,4], digits = 3)
+  
+  gestmal<-ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(Gestation))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      limits = c(0,75),
+      breaks = c(0, 25,45,75),
+      labels = c(0, 25,45,75))+
+    geom_abline(intercept = coef(gestation.mal)[1]*100, slope =  coef(gestation.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Gestation") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=5)))+
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    labs(title="B")
+  
+  #ggsave(filename='gestmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #gestneo/gestmal
+  
+  #ggsave(filename='gestneomal.pdf', width=9.5, height=18, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Gest",nrow(cutData), r.v.gestmal, p.v.gestmal, ld.v.gestmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#litter size models 
+#litter size neo
+cutData <- DataRum[,c(5,9,10,11,13,28,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  litter.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(litter_size),data=cutData,
+                           tree=pruned.tree,method="ML",se=SE)
+  summary(litter.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.litneo <- R2(phy = pruned.tree,litter.neo)
+  r.v.litneo <- format(r.v.litneo[3])
+  r.v.litneo <-signif(as.numeric(r.v.litneo), digits= 2)
+  ld.v.litneo<- summary(litter.neo)$modelStruct$corStruct
+  ld.v.litneo <- signif(ld.v.litneo[1], digits = 2)
+  p.v.litneo<-summary(litter.neo)$tTable
+  p.v.litneo<-signif(p.v.litneo[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(litter_size))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(litter.neo)[1]*100, slope =  coef(litter.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    labs(title = "Neoplasia Prevalence vs. Litter Size",  
+         subtitle =bquote(p-value:.(r.v.litneo)~R^2:.(p.v.litneo)~Lambda:.(ld.v.litneo))) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Litter Size") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c(log10(min(cutData$litter_size)),log10(max(cutData$litter_size))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text", x=-0.35, y=83.8, label = "1", size = 7)
+  
+  
+  ggsave(filename='S1litneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Lit",nrow(cutData), r.v.litneo, p.v.litneo, ld.v.litneo))
+  
+  #Print stats
+  print(SummaryStats)
+  
+}
+
+#litter size mal
+cutData <- DataRum[,c(5,9,10,11,17,28,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+
+tree <- read.tree("min1.nwk")
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  litter.mal <- pglsSEyPagel(MalignancyPrevalence~log10(litter_size),data=cutData,
+                             tree=pruned.tree,method="ML",se=SE)
+  summary(litter.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.litmal <- R2(phy = pruned.tree,litter.mal)
+  r.v.litmal <- format(r.v.litmal[3])
+  r.v.litmal <-signif(as.numeric(r.v.litmal), digits= 2)
+  ld.v.litmal<- summary(litter.mal)$modelStruct$corStruct
+  ld.v.litmal <- signif(ld.v.litmal[1], digits = 2)
+  p.v.litmal<-summary(litter.mal)$tTable
+  p.v.litmal<-signif(p.v.litmal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(litter_size))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      limits = c(0,75),
+      breaks = c(0, 25,45,75),
+      labels = c(0, 25,45,75))+
+    coord_cartesian(xlim = c(log10(min(cutData$litter_size)),log10(max(cutData$litter_size))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(litter.mal)[1]*100, slope =  coef(litter.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    labs(title = "Malignancy Prevalence vs. Litter Size",  
+         subtitle =bquote(p-value:.(r.v.litmal)~R^2:.(p.v.litmal)~Lambda:.(ld.v.litmal))) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Litter Size") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    annotate("text", x=-0.35, y=50.3, label = "2", size = 7)
+  
+  ggsave(filename='S2litmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Lit",nrow(cutData), r.v.litmal, p.v.litmal, ld.v.litmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+### Longevity model
+#longevity neo
+cutData <- DataRum[,c(5,9,10,11,13,41,48),drop=FALSE] 
+cutData[cutData$max_longevity < 0,] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies<-cutData$Species
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  longevity.neo<-pglsSEyPagel(NeoplasiaPrevalence~max_longevity,data=cutData,
+                              tree=pruned.tree,method="ML",se=SE)
+  summary(longevity.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.longneo <- R2(phy = pruned.tree,longevity.neo)
+  r.v.longneo <- format(r.v.longneo[3])
+  r.v.longneo <-signif(as.numeric(r.v.longneo), digits= 2)
+  ld.v.longneo<- summary(longevity.neo)$modelStruct$corStruct
+  ld.v.longneo <- signif(ld.v.longneo[1], digits = 2)
+  p.v.longneo<-summary(longevity.neo)$tTable
+  p.v.longneo<-signif(p.v.longneo[2,4], digits = 3)
+  
+  longneo<-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(max_longevity))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      limits = c(0,75),
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(longevity.neo)[1]*100, slope =  coef(longevity.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Max Longevity (Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    scale_size(name   = "Total Necropsies",
+               breaks = c(20,100,200,300,477),
+               labels =  c(20,100,200,300,477))+
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    labs(title = "A")+
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Class", size="Total Necropsies")
+  
+  
+  ggsave(filename='longneo.png', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Longevity",nrow(cutData), r.v.longneo, p.v.longneo, ld.v.longneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#create weight over longevity model
+#wgtneo/longneo
+#ggsave(filename='wgtlong.pdf', width=9.5, height=18, limitsize=FALSE,bg="white")
+
+#longevity mal
+
+cutData <- DataRum[,c(5,9,10,11,17,41,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  longevity.mal<-pglsSEyPagel(MalignancyPrevalence~log10(max_longevity),data=cutData,
+                              tree=pruned.tree,method="ML",se=SE)
+  summary(longevity.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.longmal <- R2(phy = pruned.tree,longevity.mal)
+  r.v.longmal <- format(r.v.longmal[3])
+  r.v.longmal <-signif(as.numeric(r.v.longmal), digits= 2)
+  ld.v.longmal<- summary(longevity.mal)$modelStruct$corStruct
+  ld.v.longmal <- signif(ld.v.longmal[1])
+  p.v.longmal<-summary(longevity.mal)$tTable
+  p.v.longmal<-signif(p.v.longmal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(max_longevity))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      limits = c(0,75),
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    coord_cartesian(xlim = c(log10(min(cutData$max_longevity)),log10(max(cutData$max_longevity))),
+                    ylim = c(0,75),clip = "off")+
+    geom_abline(intercept = coef(longevity.mal)[1]*100, slope =  coef(longevity.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("Max Longevity (Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( MalignancyPrevalence > .2,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    labs(title = "B")+
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())
+  #annotate("text", x=1.07, y=50.3, label = "5", size = 7)
+  
+  ggsave(filename='S5longmal.png', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Longevity",nrow(cutData), r.v.longmal, p.v.longmal, ld.v.longmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+##BMR models
+#bmr neo
+cutData <- DataRum[,c(5,9,10,11,13,31,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  print("Data set has more than 2 entries, running stats model")
+  BMR.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(metabolic_rate),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  summary(BMR.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.bmrneo <- R2(phy = pruned.tree,BMR.neo)
+  r.v.bmrneo <- format(r.v.bmrneo[3])
+  r.v.bmrneo <-signif(as.numeric(r.v.bmrneo), digits= 2)
+  ld.v.bmrneo<- summary(BMR.neo)$modelStruct$corStruct
+  ld.v.bmrneo <- signif(ld.v.bmrneo[1], digits = 2)
+  p.v.bmrneo<-summary(BMR.neo)$tTable
+  p.v.bmrneo<-signif(p.v.bmrneo[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(metabolic_rate))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(BMR.neo)[1]*100, slope =  coef(BMR.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Basal Metabolic Rate") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Metabolic Rate in Mammals",  
+         subtitle =bquote(p-value:.(p.v.bmrneo)~R^2:.(r.v.bmrneo)~Lambda:.(ld.v.bmrneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c(log10(min(cutData$metabolic_rate)),log10(max(cutData$metabolic_rate))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text", x=.9, y=83.8, label = "3", size = 7)
+  
+  ggsave(filename='S3bmrneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs BMR",nrow(cutData), r.v.bmrneo, p.v.bmrneo, ld.v.bmrneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+
+#bmr mal
+
+cutData <- DataRum[,c(5,9,10,11,17,31,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  BMR.mal<-pglsSEyPagel(MalignancyPrevalence~log10(metabolic_rate),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  summary(BMR.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.bmrmal <- R2(phy = pruned.tree,BMR.mal)
+  r.v.bmrmal <- format(r.v.bmrmal[3])
+  r.v.bmrmal <-signif(as.numeric(r.v.bmrmal), digits= 2)
+  ld.v.bmrmal<- summary(BMR.mal)$modelStruct$corStruct
+  ld.v.bmrmal <- signif(ld.v.bmrmal[1], digits = 2)
+  p.v.bmrmal<-summary(BMR.mal)$tTable
+  p.v.bmrmal<-signif(p.v.bmrmal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(metabolic_rate))) + 
+    geom_abline(intercept = coef(BMR.mal)[1]*100, slope =  coef(BMR.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c(log10(min(cutData$metabolic_rate)),log10(max(cutData$metabolic_rate))),
+                    ylim = c(0,45),clip = "off")+
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Basal Metabolic Rate") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Malignancy Prevalence vs. Metabolic Rate",  
+         subtitle =bquote(p-value:.(p.v.bmrmal)~R^2:.(r.v.bmrmal)~Lambda:.(ld.v.bmrmal))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    annotate("text", x=.9, y=50.3, label = "4", size = 7)
+  
+  ggsave(filename='S4bmrmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs BMR",nrow(cutData), r.v.bmrmal, p.v.bmrmal, ld.v.bmrmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#wxl models #weight and longevity
+#wxl neo
+cutData <- DataRum[,c(5,9,10,11,13,41,39,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wxl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(max_longevity*adult_weight),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wxl.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wxneo <- R2(phy = pruned.tree,wxl.neo)
+  r.v.wxneo <- format(r.v.wxneo[3])
+  r.v.wxneo <-signif(as.numeric(r.v.wxneo), digits= 2)
+  ld.v.wxneo<- summary(wxl.neo)$modelStruct$corStruct
+  ld.v.wxneo <- signif(ld.v.wxneo[1], digits = 2)
+  p.v.wxneo<-summary(wxl.neo)$tTable
+  p.v.wxneo<-signif(p.v.wxneo[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(adult_weight*max_longevity))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(wxl.neo)[1]*100, slope =  coef(wxl.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Adult Body Mass(g)*Longevity(Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Max Longevity*Body Mass",  
+         subtitle =bquote(p-value:.(p.v.wxneo)~R^2:.(r.v.wxneo)~Lambda:.(ld.v.wxneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c((min(log10(cutData$adult_weight*cutData$max_longevity))),max(log10(cutData$adult_weight*cutData$max_longevity))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text", x=2, y=83.8, label = "5", size = 7)
+  
+  ggsave(filename='S5masslongneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Masslong",nrow(cutData), r.v.wxneo, p.v.wxneo, ld.v.wxneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#wxl mal
+cutData <- DataRum[,c(5,9,10,11,17,41,39,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wxl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(max_longevity*adult_weight),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wxl.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wxmal <- R2(phy = pruned.tree,wxl.mal)
+  r.v.wxmal <- format(r.v.wxmal[3])
+  r.v.wxmal <-signif(as.numeric(r.v.wxmal), digits= 2)
+  ld.v.wxmal<- summary(wxl.mal)$modelStruct$corStruct
+  ld.v.wxmal <- signif(ld.v.wxmal[1], digits = 2)
+  p.v.wxmal<-summary(wxl.mal)$tTable
+  p.v.wxmal<-signif(p.v.wxmal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(adult_weight*max_longevity))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c((min(log10(cutData$adult_weight*cutData$max_longevity))),max(log10(cutData$adult_weight*cutData$max_longevity))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(wxl.mal)[1]*100, slope =  coef(wxl.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Adult Body Mass(g)*Longevity(Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Malignancy Prevalence vs. Max Longevity*Body Mass",  
+         subtitle =bquote(p-value:.(p.v.wxmal)~R^2:.(r.v.wxmal)~Lambda:.(ld.v.wxmal))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    annotate("text", x=2, y=50.3, label = "6", size = 7)
+  
+  ggsave(filename='S6wgtlongmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Weight",nrow(cutData), r.v.wxmal, p.v.wxmal, ld.v.wxmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#litters per year neo
+cutData <- DataRum[,c(5,9,10,11,13,29,48),drop=FALSE] 
+cutData <- cutData[!(cutData$common_name %in% c("Dwarf caimen","Agassiz's desert tortoise","Egyptian snouted cobra","Mangrove snake","Tiger rat snake","Madagscar tree boa")),]
+cutData[cutData$litters_year < 0, ] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  lityear.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(litters_year),data=cutData,
+                            tree=pruned.tree,method="ML",se=SE)
+  summary(lityear.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.lyearneo <- R2(phy = pruned.tree,lityear.neo)
+  r.v.lyearneo <- format(r.v.lyearneo[3])
+  r.v.lyearneo<-signif(as.numeric(r.v.lyearneo), digits= 2)
+  ld.v.lyearneo<- summary(lityear.neo)$modelStruct$corStruct
+  ld.v.lyearneo <- signif(ld.v.lyearneo[1], digits = 2)
+  p.v.lyearneo<-summary(lityear.neo)$tTable
+  p.v.lyearneo<-signif(p.v.lyearneo[2,4], digits = 3)
+  
+  lityearneo<-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(litters_year))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
+    scale_y_continuous(
+      limits = c(0,75),
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(lityear.neo)[1]*100, slope =  coef(lityear.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Litters per Year") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    scale_size(name   = "Total Necropsies",
+               breaks = c(20,100,200,300,477),
+               labels =  c(20,100,200,300,477))+
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5)+
+    labs(title = "Neoplasia Prevalence vs. Litters per Year",  
+         subtitle =bquote(p-value:.(p.v.lyearneo)~R^2:.(r.v.lyearneo)~Lambda:.(ld.v.lyearneo))) +
+    guides(colour = guide_legend(override.aes=list(size=5),order = 1) ,size= guide_legend(order=2)) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(size="Total Necropsies",colour="Class")+
+    annotate("text", x=2, y=50.3, label = "5", size = 7)
+  
+  ggsave(plot = lityearneo,filename='S5lityearneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs LitYear",nrow(cutData), r.v.lyearneo, p.v.lyearneo, ld.v.lyearneo))
+  
+  #Print stats
+  print(SummaryStats)
+  
+  
+  #create lit year over gest model
+  lityearneo/gestmal
+  ggsave(filename='litgest.pdf', width=9.5, height=18, limitsize=FALSE,bg="white")
+}
+
+#litter per year mal
+cutData <- DataRum[,c(5,9,10,11,17,29,48),drop=FALSE] 
+cutData <- cutData[!(cutData$common_name %in% c("Dwarf caimen","Agassiz's desert tortoise","Egyptian snouted cobra","Mangrove snake","Tiger rat snake","Madagscar tree boa")),]
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  lityear.mal<-pglsSEyPagel(MalignancyPrevalence~log10(litters_year),data=cutData,
+                            tree=pruned.tree,method="ML",se=SE)
+  summary(lityear.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.lyearmal <- R2(phy = pruned.tree,lityear.mal)
+  r.v.lyearmal <- format(r.v.lyearmal[3])
+  r.v.lyearmal<-signif(as.numeric(r.v.lyearmal), digits= 2)
+  ld.v.lyearmal<- summary(lityear.mal)$modelStruct$corStruct
+  ld.v.lyearmal<- signif(ld.v.lyearmal[1], digits = 2)
+  p.v.lyearmal<-summary(lityear.mal)$tTable
+  p.v.lyearmal<-signif(p.v.lyearmal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(litters_year))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c(log10(min(cutData$litters_year)),log10(max(cutData$litters_year))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(lityear.mal)[1]*100, slope =  coef(lityear.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Litters per Year") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Malignancy Prevalence vs. Litters per Year",  
+         subtitle =bquote(p-value:.(p.v.lyearmal)~R^2:.(r.v.lyearmal)~Lambda:.(ld.v.lyearmal))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    annotate("text",  x=-.85, y=50.3, label = "8", size = 7)
+  
+  ggsave(filename='S8lityearmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs LitYear",nrow(cutData), r.v.lyearmal, p.v.lyearmal, ld.v.lyearmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+
+####Female Maturity neo
+cutData <- DataRum[,c(5,9,10,11,13,32,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  Fmaturity.neo<-pglsSEyPagel(NeoplasiaPrevalence~female_maturity,data=cutData,
+                              tree=pruned.tree,method="ML",se=SE)
+  summary(Fmaturity.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.fmaturityneo <- R2(phy = pruned.tree,Fmaturity.neo)
+  r.v.fmaturityneo <- format(r.v.fmaturityneo[3])
+  r.v.fmaturityneo<-signif(as.numeric(r.v.fmaturityneo), digits= 2)
+  ld.v.fmaturityneo<- summary(Fmaturity.neo)$modelStruct$corStruct
+  ld.v.fmaturityneo <- signif(ld.v.fmaturityneo[1], digits = 2)
+  p.v.fmaturityneo<-summary(Fmaturity.neo)$tTable
+  p.v.fmaturityneo<-signif(p.v.fmaturityneo[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(female_maturity))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(Fmaturity.neo)[1]*100, slope =  coef(Fmaturity.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("Female Maturity (Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Female Maturity",  
+         subtitle =bquote(p-value:.(p.v.fmaturityneo)~R^2:.(r.v.fmaturityneo)~Lambda:.(ld.v.fmaturityneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c(log10(min(cutData$female_maturity)),log10(max(cutData$female_maturity))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text", x=-.09, y=83.9, label = "9", size = 7)
+  
+  ggsave(filename='S9femmatneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs FemMat",nrow(cutData), r.v.fmaturityneo, p.v.fmaturityneo, ld.v.fmaturityneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#Female Maturity Mal
+cutData <- DataRum[,c(5,9,10,11,17,32,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  Fmaturity.mal<-pglsSEyPagel(MalignancyPrevalence~female_maturity,data=cutData,
+                              tree=pruned.tree,method="ML",se=SE)
+  summary(Fmaturity.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.fmaturitymal <- R2(phy = pruned.tree,Fmaturity.mal)
+  r.v.fmaturitymal <- format(r.v.fmaturitymal[3])
+  r.v.fmaturitymal<-signif(as.numeric(r.v.fmaturitymal), digits= 2)
+  ld.v.fmaturitymal<- summary(Fmaturity.mal)$modelStruct$corStruct
+  ld.v.fmaturitymal <- signif(ld.v.fmaturitymal[1], digits = 2)
+  p.v.fmaturitymal<-summary(Fmaturity.mal)$tTable
+  p.v.fmaturitymal<-signif(p.v.fmaturitymal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(female_maturity))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c(log10(min(cutData$female_maturity)),log10(max(cutData$female_maturity))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(Fmaturity.mal)[1]*100, slope =  coef(Fmaturity.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("Female Maturity (Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Malignancy Prevalence vs. Female Maturity",  
+         subtitle =bquote(p-value:.(p.v.fmaturitymal)~R^2:.(r.v.fmaturitymal)~Lambda:.(ld.v.fmaturitymal))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    annotate("text", x=-.09, y=50.3, label = "10", size = 7)
+  
+  ggsave(filename='S10femmatmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs FemMat",nrow(cutData), r.v.fmaturitymal, p.v.fmaturitymal, ld.v.fmaturitymal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+####Male Maturity neo
+cutData <- DataRum[,c(5,9,10,11,13,33,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  Mmaturity.neo<-pglsSEyPagel(NeoplasiaPrevalence~male_maturity,data=cutData,
+                              tree=pruned.tree,method="ML",se=SE)
+  summary(Mmaturity.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.Mmaturityneo <- R2(phy = pruned.tree,Mmaturity.neo)
+  r.v.Mmaturityneo <- format(r.v.Mmaturityneo[3])
+  r.v.Mmaturityneo<-signif(as.numeric(r.v.Mmaturityneo), digits= 2)
+  ld.v.Mmaturityneo<- summary(Mmaturity.neo)$modelStruct$corStruct
+  ld.v.Mmaturityneo <- signif(ld.v.Mmaturityneo[1], digits = 2)
+  p.v.Mmaturityneo<-summary(Mmaturity.neo)$tTable
+  p.v.Mmaturityneo<-signif(p.v.Mmaturityneo[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(male_maturity))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(Mmaturity.neo)[1]*100, slope =  coef(Mmaturity.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("Male Maturity (Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Male Maturity",  
+         subtitle =bquote(p-value:.(p.v.Mmaturityneo)~R^2:.(r.v.Mmaturityneo)~Lambda:.(ld.v.Mmaturityneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c(log10(min(cutData$male_maturity)),log10(max(cutData$male_maturity))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text", x=-0.74, y=83.8, label = "11", size = 7)
+  
+  ggsave(filename='S11malematneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs MaleMat",nrow(cutData), r.v.Mmaturityneo, p.v.Mmaturityneo, ld.v.Mmaturityneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#Male Maturity Mal
+cutData <- DataRum[,c(5,9,10,11,17,33,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  Mmaturity.mal<-pglsSEyPagel(MalignancyPrevalence~male_maturity,data=cutData,
+                              tree=pruned.tree,method="ML",se=SE)
+  summary(Mmaturity.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.Mmaturitymal <- R2(phy = pruned.tree,Mmaturity.mal)
+  r.v.Mmaturitymal <- format(r.v.Mmaturitymal[3])
+  r.v.Mmaturitymal<-signif(as.numeric(r.v.Mmaturitymal), digits= 2)
+  ld.v.Mmaturitymal<- summary(Mmaturity.mal)$modelStruct$corStruct
+  ld.v.Mmaturitymal <- signif(ld.v.Mmaturitymal[1], digits = 2)
+  p.v.Mmaturitymal<-summary(Mmaturity.mal)$tTable
+  p.v.Mmaturitymal<-signif(p.v.Mmaturitymal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(male_maturity))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c(log10(min(cutData$male_maturity)),log10(max(cutData$male_maturity))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(Fmaturity.mal)[1]*100, slope =  coef(Fmaturity.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("Male Maturity (Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Malignancy Prevalence vs. Male Maturity",  
+         subtitle =bquote(p-value:.(p.v.Mmaturitymal)~R^2:.(r.v.Mmaturitymal)~Lambda:.(ld.v.Mmaturitymal))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    annotate("text", x=-.74, y=50.3, label = "12", size = 7)
+  
+  ggsave(filename='S12malematmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  SummaryStats <- rbind(SummaryStats, list("Mal vs MaleMat",nrow(cutData), r.v.Mmaturitymal, p.v.Mmaturitymal, ld.v.Mmaturitymal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+#Weaning Body Mass neo
+cutData <- DataRum[,c(5,9,10,11,13,38,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  weanw.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(weaning_weight),data=cutData,
+                          tree=pruned.tree,method="ML",se=SE)
+  summary(weanw.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.weanwneo <- R2(phy = pruned.tree,weanw.neo)
+  r.v.weanwneo <- format(r.v.weanwneo[3])
+  r.v.weanwneo<-signif(as.numeric(r.v.weanwneo), digits= 2)
+  ld.v.weanwneo<- summary(weanw.neo)$modelStruct$corStruct
+  ld.v.weanwneo <- signif(ld.v.weanwneo[1], digits = 2)
+  p.v.weanwneo<-summary(weanw.neo)$tTable
+  p.v.weanwneo<-signif(p.v.weanwneo[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(weaning_weight))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(weanw.neo)[1]*100, slope =  coef(weanw.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Weaning Body Mass (g)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Weaning Body Mass",  
+         subtitle =bquote(p-value:.(p.v.weanwneo)~R^2:.(r.v.weanwneo)~Lambda:.(ld.v.weanwneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c(log10(min(cutData$weaning_weight)),log10(max(cutData$weaning_weight))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text",  x=-.64, y=83.8, label = "13", size = 7)
+  
+  ggsave(filename='S13weanneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs Wean",nrow(cutData), r.v.weanwneo, p.v.weanwneo, ld.v.weanwneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#Weaning Body Mass Mal
+cutData <- DataRum[,c(5,9,10,11,17,38,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  weanw.mal<-pglsSEyPagel(MalignancyPrevalence~log10(weaning_weight),data=cutData,
+                          tree=pruned.tree,method="ML",se=SE)
+  summary(weanw.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.weanwmal <- R2(phy = pruned.tree,weanw.mal)
+  r.v.weanwmal <- format(r.v.weanwmal[3])
+  r.v.weanwmal<-signif(as.numeric(r.v.weanwmal), digits= 2)
+  ld.v.weanwmal<- summary(weanw.mal)$modelStruct$corStruct
+  ld.v.weanwmal <- signif(ld.v.weanwmal[1], digits = 2)
+  p.v.weanwmal<-summary(weanw.mal)$tTable
+  p.v.weanwmal<-signif(p.v.weanwmal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(weaning_weight))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c(log10(min(cutData$weaning_weight)),log10(max(cutData$weaning_weight))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(Fmaturity.mal)[1]*100, slope =  coef(Fmaturity.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Weaning Body Mass (g)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Malignancy Prevalence vs. Weaning Body Mass",  
+         subtitle =bquote(p-value:.(p.v.weanwmal)~R^2:.(r.v.weanwmal)~Lambda:.(ld.v.weanwmal))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    annotate("text", x=-.64, y=50.3, label = "14", size = 7)
+  
+  ggsave(filename='S14weanmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs Wean",nrow(cutData), r.v.weanwmal, p.v.weanwmal, ld.v.weanwmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#Growth Rate Neo
+cutData <- DataRum[,c(5,9,10,11,13,40,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  GrowthR.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(growth_rate.1.days.),data=cutData,
+                            tree=pruned.tree,method="ML",se=SE)
+  summary(GrowthR.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.GrowthRneo <- R2(phy = pruned.tree,GrowthR.neo)
+  r.v.GrowthRneo <- format(r.v.GrowthRneo[3])
+  r.v.GrowthRneo<-signif(as.numeric(r.v.GrowthRneo), digits= 2)
+  ld.v.GrowthRneo<- summary(GrowthR.neo)$modelStruct$corStruct
+  ld.v.GrowthRneo <- signif(ld.v.GrowthRneo[1], digits = 2)
+  p.v.GrowthRneo<-summary(GrowthR.neo)$tTable
+  p.v.GrowthRneo<-signif(p.v.GrowthRneo[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(growth_rate.1.days.))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(GrowthR.neo)[1]*100, slope =  coef(GrowthR.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Growth Rate") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Growth Rate",  
+         subtitle =bquote(p-value:.(p.v.GrowthRneo)~R^2:.(r.v.GrowthRneo)~Lambda:.(ld.v.GrowthRneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c(log10(min(cutData$growth_rate.1.days.)),log10(max(cutData$growth_rate.1.days.))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text",x=-3.36, y=83.8, label = "15", size = 7)
+  
+  ggsave(filename='S15growneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Neo vs GrowthRate",nrow(cutData), r.v.GrowthRneo, p.v.GrowthRneo, ld.v.GrowthRneo))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#Growth Rate Mal
+cutData <- DataRum[,c(5,9,10,11,17,40,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  GrowthR.mal<-pglsSEyPagel(MalignancyPrevalence~log10(growth_rate.1.days.),data=cutData,
+                            tree=pruned.tree,method="ML",se=SE)
+  summary(GrowthR.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.GrowthRmal <- R2(phy = pruned.tree,GrowthR.mal)
+  r.v.GrowthRmal <- format(r.v.GrowthRmal[3])
+  r.v.GrowthRmal<-signif(as.numeric(r.v.GrowthRmal), digits= 2)
+  ld.v.GrowthRmal<- summary(GrowthR.mal)$modelStruct$corStruct
+  ld.v.GrowthRmal <- signif(ld.v.GrowthRmal[1], digits = 2)
+  p.v.GrowthRmal<-summary(GrowthR.mal)$tTable
+  p.v.GrowthRmal<-signif(p.v.GrowthRmal[2,4], digits = 3)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(growth_rate.1.days.))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c(log10(min(cutData$growth_rate.1.days.)),log10(max(cutData$growth_rate.1.days.))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(GrowthR.mal)[1]*100, slope =  coef(GrowthR.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Growth Rate") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Malignancy Prevalence vs. Growth Rate",  
+         subtitle =bquote(p-value:.(p.v.GrowthRmal)~R^2:.(r.v.GrowthRmal)~Lambda:.(ld.v.GrowthRmal))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    annotate("text", x=-3.35, y=50.3, label = "16", size = 7)
+  
+  ggsave(filename='S16growmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Mal vs GrowthRate",nrow(cutData), r.v.GrowthRmal, p.v.GrowthRmal, ld.v.GrowthRmal))
+  
+  #Print stats
+  print(SummaryStats)
+}
+
+#START OF MULTIVARIABLE TESTS
+#w+g
+
+cutData <- DataRum[,c(5,9,10,11,13,39,34,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wpl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation)+log10(adult_weight),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  
+  coef(wpl.neo)
+  
+  summary(wpl.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpneo <- R2(phy = pruned.tree,wpl.neo)
+  r.v.wpneo <- format(r.v.wpneo[3])
+  r.v.wpneo <-signif(as.numeric(r.v.wpneo), digits= 2)
+  ld.v.wpneo<- summary(wpl.neo)$modelStruct$corStruct
+  ld.v.wpneo <- signif(ld.v.wpneo[1], digits = 2)
+  p.v.wpneo<-summary(wpl.neo)$tTable
+  p.v.wpneogest<-signif(p.v.wpneo[2,4], digits = 3)
+  p.v.wpneowgt<-signif(p.v.wpneo[3,4], digits = 2)
+  p.v.wpgneogest<-signif(p.v.wpneo[2,4], digits = 3)
+  p.v.wpgneogest<-signif(p.v.wpneo[3,4], digits = 2)
+  c.wpplneogest<-coef(wpl.neo)[2]
+  c.wpplneolong<-coef(wpl.neo)[3]
+  
+  
+  # Assuming you have a vector of p-values from multiple tests
+  p.values <- c(p.v.wpneogest,p.v.wpneowgt)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  # Print which coefficients are significant
+  print(significant_effects)
+  
+  #Do combined Pvalue with fischer method
+  combopwpplneo<-fisher(p.values)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(adult_weight)+log10(Gestation))) + 
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,50,75),
+      labels = c(0, 25,50,75))+
+    geom_abline(intercept = coef(wpl.neo)[1]*100, slope =  coef(wpl.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Adult Body Mass(g)+Gestation(Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Max Longevity+Gestation",  
+         subtitle =bquote(p-value:.(p.v.wpneo)~R^2:.(r.v.wpneo)~Lambda:.(ld.v.wpneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Class", size="Total Necropsies")+
+    guides(size=guide_legend())+
+    coord_cartesian(xlim = c((min(log10(cutData$adult_weight)+log10(cutData$Gestation))),max(log10(cutData$adult_weight)+log10(cutData$Gestation))),
+                    ylim = c(0,75),clip = "off")+
+    annotate("text", x=.13, y=83.8, label = "19", size = 7)
+  
+  ggsave(filename='S19wgtgestneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Neo vs Gest+Weight","Gestation","AdultWeight",nrow(cutData), r.v.wpneo, ld.v.wpneo, p.v.wpneogest, p.v.wpneowgt,adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplneo[1])))
+  
+  #Print stats
+  print(SummaryStats2)
+}
+
+
+#w+g mal
+
+cutData <- DataRum[,c(5,9,10,11,17,39,34,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wpl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(Gestation)+log10(adult_weight),data=cutData,
+                        tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wpl.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpmal <- R2(phy = pruned.tree,wpl.mal)
+  r.v.wpmal <- format(r.v.wpmal[3])
+  r.v.wpmal <-signif(as.numeric(r.v.wpmal), digits= 2)
+  ld.v.wpmal<- summary(wpl.mal)$modelStruct$corStruct
+  ld.v.wpmal <- signif(ld.v.wpmal[1], digits = 2)
+  p.v.wpmal<-summary(wpl.mal)$tTable
+  p.v.wpgmalgest<-signif(p.v.wpmal[2,4], digits = 3)
+  p.v.wpgmalwgt<-signif(p.v.wpmal[3,4], digits = 2)
+  c.wpplmalgest<-coef(wpl.mal)[2]
+  c.wpplmalwgt<-coef(wpl.mal)[3]
+  
+  
+  # Assuming you have a vector of p-values from multiple tests
+  p.values <- c(p.v.wpgmalgest,p.v.wpgmalwgt)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  # Print which coefficients are significant
+  print(significant_effects)
+  
+  #Do combined Pvalue with fischer method
+  combopwpplmal<-fisher(p.values)
+  
+  ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(Gestation)+log10(adult_weight))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c((min(log10(cutData$adult_weight)+log10(cutData$Gestation))),max(log10(cutData$adult_weight)+log10(cutData$Gestation))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(wpl.mal)[1]*100, slope =  coef(wpl.mal)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Malignancy Prevalence (%)") +
+    xlab("(log10) Adult Body Mass(g)+Gestation(Mo)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( MalignancyPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Malignancy Prevalence vs. Max Longevity+Gestation",  
+         subtitle =bquote(p-value:.(p.v.wpmal)~R^2:.(r.v.wpmal)~Lambda:.(ld.v.wpmal))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Class", size="Total Necropsies")+
+    annotate("text", x=.13, y=50.3, label = "20", size = 7)
+  
+  
+  ggsave(filename='S20wgtgestmal.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Mal vs Gest+Weight","Gestation","AdultWeight",nrow(cutData), r.v.wpmal, ld.v.wpmal, p.v.wpgmalgest, p.v.wpgmalwgt, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplmal[1])))
+  
+  #Print stats
+  print(SummaryStats2)
+}
+
+#g+l
+
+cutData <- DataRum[,c(5,9,10,11,13,41,34,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wppl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation)+log10(max_longevity),data=cutData,
+                         tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.neo)
+  coef(wppl.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplneo <- R2(phy = pruned.tree,wppl.neo)
+  r.v.wpplneo <- format(r.v.wpplneo[3])
+  r.v.wpplneo <-signif(as.numeric(r.v.wpplneo), digits= 2)
+  ld.v.wpplneo<- summary(wppl.neo)$modelStruct$corStruct
+  ld.v.wpplneo <- signif(ld.v.wpplneo[1], digits = 2)
+  p.v.wpplneo<-summary(wppl.neo)$tTable
+  p.v.wpplneogest<-signif(p.v.wpplneo[2,4], digits = 3)
+  p.v.wpplneolong<-signif(p.v.wpplneo[3,4], digits = 2)
+  c.wpplneogest<-coef(wppl.neo)[2]
+  c.wpplneolong<-coef(wppl.neo)[3]
+  
+  # Assuming you have a vector of p-values from multiple tests
+  p.values <- c(p.v.wpplneogest,p.v.wpplneolong)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  # Print which coefficients are significant
+  print(significant_effects)
+  
+  #Do combined Pvalue with fischer method
+  combopwpplneo<-fisher(p.values)
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Neo vs Gest+Long","Gestation","Longevity",nrow(cutData), r.v.wpneo, ld.v.wpneo, p.v.wpplneogest,p.v.wpplneolong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplneo[1])))
+  #Print stats
+  print(SummaryStats2)
+}  
+
+
+#g+l mal
+
+cutData <- DataRum[,c(5,9,10,11,17,41,34,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wppl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(Gestation)+log10(max_longevity),data=cutData,
+                         tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplmal <- R2(phy = pruned.tree,wppl.mal)
+  r.v.wpplmal <- format(r.v.wpplmal[3])
+  r.v.wpplmal <-signif(as.numeric(r.v.wpplmal), digits= 2)
+  ld.v.wpplmal<- summary(wppl.mal)$modelStruct$corStruct
+  ld.v.wpplmal <- signif(ld.v.wpplmal[1], digits = 2)
+  p.v.wpplmal<-summary(wppl.mal)$tTable
+  p.v.wpplmalgest<-signif(p.v.wpplmal[2,4], digits = 3)
+  p.v.wpplmallong<-signif(p.v.wpplmal[3,4], digits = 2)
+  c.wpplmalgest<-coef(wppl.mal)[2]
+  c.wpplmallong<-coef(wppl.mal)[3]
+  
+  #combine p values for fisher p value
+  p.values<-c(p.v.wpplmalgest,p.v.wpplmallong)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  #Do combined Pvalue with fischer method
+  combopwpplmal<-fisher(p.values)
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Mal vs Gest+Long","Gestation","Longevity",nrow(cutData), r.v.wpmal, ld.v.wpmal, p.v.wpplmalgest, p.v.wpplmallong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplmal[1])))
+  #Print stats
+  print(SummaryStats2)
+}
+
+#bw+long neo -Francesca's code
+
+cutData <- DataRum[,c(5,9,10,11,13,37,41,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wppl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(birth_weight)+log10(max_longevity),data=cutData,
+                         tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.neo)
+  coef(wppl.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplneo <- R2(phy = pruned.tree,wppl.neo)
+  r.v.wpplneo <- format(r.v.wpplneo[3])
+  r.v.wpplneo <-signif(as.numeric(r.v.wpplneo), digits= 2)
+  ld.v.wpplneo<- summary(wppl.neo)$modelStruct$corStruct
+  ld.v.wpplneo <- signif(ld.v.wpplneo[1], digits = 2)
+  p.v.wpplneo<-summary(wppl.neo)$tTable
+  p.v.wpplneobw<-signif(p.v.wpplneo[2,4], digits = 3)
+  p.v.wpplneolong<-signif(p.v.wpplneo[3,4], digits = 2)
+  c.wpplneobw<-coef(wppl.neo)[2]
+  c.wpplneolong<-coef(wppl.neo)[3]
+  
+  # Assuming you have a vector of p-values from multiple tests
+  p.values <- c(p.v.wpplneobw,p.v.wpplneolong)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  # Print which coefficients are significant
+  print(significant_effects)
+  
+  #Do combined Pvalue with fischer method
+  combopwpplneo<-fisher(p.values)
+  
+  ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(birth_weight)+log10(max_longevity))) +
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff"))+
+    scale_y_continuous(
+      breaks = c(0, 25,45),
+      labels = c(0, 25,45))+
+    coord_cartesian(xlim = c((min(log10(cutData$max_longevity)+log10(cutData$birth_weight))),max(log10(cutData$max_longevity)+log10(cutData$birth_weight))),
+                    ylim = c(0,45),clip = "off")+
+    geom_abline(intercept = coef(wppl.neo)[1]*100, slope =  coef(wppl.neo)[2]*100,
+                color = 'grey',size = 1.2) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Neoplasia Prevalence (%)") +
+    xlab("(log10) Max Longevity(mo) + Birth Weight(g)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    labs(title = "Neoplasia Prevalence vs. Birth Weight+Max Longevity",  
+         subtitle =bquote(p-value:.(p.v.wpplneo)~R^2:.(r.v.wpplneo)~Lambda:.(ld.v.wpplneo))) +
+    guides(colour = guide_legend(override.aes = list(size=5))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Class", size="Total Necropsies")+
+    annotate("text", x=.13, y=50.3, label = "20", size = 7)
+  
+  
+  #ggsave(filename='S20bwmaxlongneo.pdf', width=13, height=10, limitsize=FALSE,bg="white")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Neo vs BirthWeight+Long","Birth Weight","Longevity",nrow(cutData), r.v.wpneo, ld.v.wpneo, p.v.wpplneobw,p.v.wpplneolong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplneo[1])))
+  #Print stats
+  print(SummaryStats2)
+}  
+
+
+#bw+long mal
+
+
+cutData <- DataRum[,c(5,9,10,11,17,37,41,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wppl.mal<-pglsSEyPagel(MalignancyPrevalence~log10(birth_weight)+log10(max_longevity),data=cutData,
+                         tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.mal)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplmal <- R2(phy = pruned.tree,wppl.mal)
+  r.v.wpplmal <- format(r.v.wpplmal[3])
+  r.v.wpplmal <-signif(as.numeric(r.v.wpplmal), digits= 2)
+  ld.v.wpplmal<- summary(wppl.mal)$modelStruct$corStruct
+  ld.v.wpplmal <- signif(ld.v.wpplmal[1], digits = 2)
+  p.v.wpplmal<-summary(wppl.mal)$tTable
+  p.v.wpplmalbw<-signif(p.v.wpplmal[2,4], digits = 3)
+  p.v.wpplmallong<-signif(p.v.wpplmal[3,4], digits = 2)
+  c.wpplmalbw<-coef(wppl.mal)[2]
+  c.wpplmallong<-coef(wppl.mal)[3]
+  
+  #combine p values for fisher p value
+  p.values<-c(p.v.wpplmalbw,p.v.wpplmallong)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  #Do combined Pvalue with fischer method
+  combopwpplmal<-fisher(p.values)
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Mal vs BirthWeight+Long","Birth Weight","Longevity",nrow(cutData), r.v.wpmal, ld.v.wpmal, p.v.wpplmalbw, p.v.wpplmallong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplmal[1])))
+  #Print stats
+  print(SummaryStats2)
+}
+
+#Neo g+l
+cutData <- DataRum[,c(5,9,10,11,13,40,30,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wppl.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(Gestation)+log10(max_longevity),data=cutData,
+                         tree=pruned.tree,method="ML",se=SE)
+  
+  summary(wppl.neo)
+  coef(wppl.neo)
+  
+  #grab r squared, lambda, and p values from summary 
+  
+  r.v.wpplneo <- R2(phy = pruned.tree,wppl.neo)
+  r.v.wpplneo <- format(r.v.wpplneo[3])
+  r.v.wpplneo <-signif(as.numeric(r.v.wpplneo), digits= 2)
+  ld.v.wpplneo<- summary(wppl.neo)$modelStruct$corStruct
+  ld.v.wpplneo <- signif(ld.v.wpplneo[1], digits = 2)
+  p.v.wpplneo<-summary(wppl.neo)$tTable
+  p.v.wpplneogest<-signif(p.v.wpplneo[2,4], digits = 3)
+  p.v.wpplneolong<-signif(p.v.wpplneo[3,4], digits = 2)
+  c.wpplneogest<-coef(wppl.neo)[2]
+  c.wpplneolong<-coef(wppl.neo)[3]
+  
+  # Assuming you have a vector of p-values from multiple tests
+  p.values <- c(p.v.wpplneogest,p.v.wpplneolong)
+  
+  # Use the p.adjust function with the BH method to adjust the p-values
+  adjusted.p.values <- p.adjust(p.values, method = "BH")
+  
+  # Determine which coefficients are significant at the 10% FDR level
+  significant_effects <- adjusted.p.values < 0.1
+  
+  # Print which coefficients are significant
+  print(significant_effects)
+  
+  #Do combined Pvalue with fischer method
+  combopwpplneo<-fisher(p.values)
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats2 <- rbind(SummaryStats2, list("Neo vs Gest+Long","Gestation","Longevity",nrow(cutData), r.v.wpneo, ld.v.wpneo, p.v.wpplneogest,p.v.wpplneolong, adjusted.p.values[1], adjusted.p.values[2], as.numeric(combopwpplneo[1])))
+  #Print stats
+  print(SummaryStats2)
+}  
+
+
+cutData <- DataRum[,c(5,9,10,11,17,36,40,48),drop=FALSE] 
+cutData[cutData < 0] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+view(cutData)
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies <- cutData$Species
+
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+
+
+
+
+#Start of reference functions.
+#adult weight and gest length model
+
+cutData <- DataRum[,c(5,9,10,11,13,39,34,48),drop=FALSE] 
+cutData[cutData == -1 ] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies<-cutData$Species
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  wgt.gest<-pglsSEyPagel(Gestation~log10(adult_weight),data=cutData,tree=pruned.tree,se=SE,method = "ML")
+  
+  summary(wgt.gest) 
+  
+  
+  #grab r squared, lambda, and p values from summary 
+  r.v.wgt.gest <- R2(phy = pruned.tree,wgt.gest)
+  r.v.wgt.gest <- format(r.v.wgt.gest[3])
+  r.v.wgt.gest <-signif(as.numeric(r.v.wgt.gest), digits= 2)
+  ld.v.wgt.gest<- summary(wgt.gest)$modelStruct$corStruct
+  ld.v.wgt.gest <- signif(ld.v.wgt.gest[1], digits = 2)
+  p.v.wgt.gest<-summary(wgt.gest)$tTable
+  p.v.wgt.gest<-signif(p.v.wgt.gest[2,4], digits = 2)
+  
+  # Extract model residuals
+  residuals <- resid(wgt.gest)
+  
+  # Add residuals to your data frame
+  cutData$residuals <- residuals
+  
+  # Standard deviation of residuals
+  std_residuals <- sd(residuals)
+  
+  # Identify outliers (e, residuals greater than 2 standard deviations from zero)
+  cutData$outlier_status <- ifelse(cutData$residuals > 1.5 * std_residuals, "High Outlier",
+                                   ifelse(cutData$residuals < -1.5 * std_residuals, "Low Outlier", "Normal"))
+  
+  #plot
+  wgtgest<-ggplot(cutData, aes(y=Gestation, x=log10(adult_weight)))+
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ),)+
+    geom_abline() +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Gestation length") +
+    xlab("(log10) Adult Body Mass (g)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    scale_size(name   = "Total Necropsies",
+               breaks = c(20,100,200,300,477),
+               labels =  c(20,100,200,300,477))+
+    geom_text_repel(data = subset(cutData, outlier_status != "Normal"), aes(label = common_name), 
+                    size = 5, max.overlaps = Inf) +
+    guides(colour = guide_legend(override.aes = list(size=3))) +
+    labs(title = "Gestation v. Adult Body Mass",
+         subtitle =bquote(p-value:.(p.v.wgt.gest)~R^2:.(r.v.wgt.gest)~Lambda:.(ld.v.wgt.gest))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Class", size="Total Necropsies")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Weight vs GestLength",nrow(cutData), r.v.wgt.gest, p.v.wgt.gest, ld.v.wgt.gest))
+  #Print stats
+  print(SummaryStats)
+} 
+
+wgtgest
+
+
+
+
+#long and gest length model
+
+cutData <- DataRum[,c(5,9,10,11,13,41,34,48),drop=FALSE] 
+cutData[cutData == -1 ] <-NA
+cutData <- na.omit(cutData)
+tree <- read.tree("min1.nwk")
+
+cutData$Species <- gsub(" ", "_", cutData$Species) 
+cutData$common_name<-gsub("_", "", cutData$common_name)
+includedSpecies<-cutData$Species
+pruned.tree<-drop.tip(
+  tree, setdiff(
+    tree$tip.label, includedSpecies))
+pruned.tree <- keep.tip(pruned.tree,pruned.tree$tip.label)
+cutData$Keep <- cutData$Species %in% pruned.tree$tip.label
+cutData <- cutData[!(cutData$Keep==FALSE),]
+rownames(cutData)<-cutData$Species
+SE<-setNames(cutData$SE_simple,cutData$Species)[rownames(cutData)]
+view(cutData)
+
+#pgls model
+if (nrow(cutData) > 9) {
+  long.gest<-pglsSEyPagel(Gestation~max_longevity,data=cutData,tree=pruned.tree,se=SE,method = "ML")
+  
+  summary(long.gest) 
+  
+  
+  #grab r squared, lambda, and p values from summary 
+  r.v.long.gest <- R2(phy = pruned.tree,long.gest)
+  r.v.long.gest <- format(r.v.long.gest[3])
+  r.v.long.gest <-signif(as.numeric(r.v.long.gest), digits= 2)
+  ld.v.long.gest<- summary(long.gest)$modelStruct$corStruct
+  ld.v.long.gest <- signif(ld.v.long.gest[1], digits = 2)
+  p.v.long.gest<-summary(long.gest)$tTable
+  p.v.long.gest<-signif(p.v.long.gest[2,4], digits = 2)
+  
+  
+  
+  #plot
+  longgest<-ggplot(cutData, aes(y=Gestation, x=max_longevity))+
+    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ),)+
+    geom_abline(slope = long.gest$coefficients[2], intercept = long.gest$coefficients[1]) +
+    theme_cowplot(12)+
+    theme(axis.title = element_text(size = 18))+
+    ylab("Gestation length") +
+    xlab("(log10) Adult Body Mass (g)") +
+    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    scale_size(name   = "Total Necropsies",
+               breaks = c(20,100,200,300,477),
+               labels =  c(20,100,200,300,477))+
+    geom_text_repel(aes(label=ifelse( Gestation > 15,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    guides(colour = guide_legend(override.aes = list(size=3))) +
+    labs(title = "Gestation v. Adult Body Mass",
+         subtitle =bquote(p-value:.(p.v.long.gest)~R^2:.(r.v.long.gest)~Lambda:.(ld.v.long.gest))) +
+    theme(
+      plot.title = element_text(size = 20, face = "bold")) +
+    theme(legend.position = "bottom")+
+    labs(colour="Class", size="Total Necropsies")
+  
+  #rbind adds a new row to a dataframe
+  SummaryStats <- rbind(SummaryStats, list("Longevity vs GestLength",nrow(cutData), r.v.long.gest, p.v.long.gest, ld.v.long.gest))
+  #Print stats
+  print(SummaryStats)
+}  
+
+longgest
+
+#Write SummaryStats to CSV
+colnames(SummaryStats) = c("Iteration Name","Data Points","R2 value","P value","Lambda")
+write.csv(SummaryStats, "SummaryStats.csv",row.names = FALSE)
+#Write SummaryStats to CSV
+colnames(SummaryStats2) = c("Iteration Name","Var1","Var2","Data Points","R2 value","Lambda","Pvalue1","Pvalue2","AdjPval1","AdjPval2","ComboP")
+write.csv(SummaryStats2, "SummaryStats2.csv",row.names = FALSE)
