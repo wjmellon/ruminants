@@ -531,7 +531,7 @@ view(cutData)
 
 #pgls model
 if (nrow(cutData) > 9) {
-  longevity.neo<-pglsSEyPagel(NeoplasiaPrevalence~max_longevity,data=cutData,
+  longevity.neo<-pglsSEyPagel(NeoplasiaPrevalence~log10(max_longevity),data=cutData,
                               tree=pruned.tree,method="ML",se=SE)
   summary(longevity.neo)
   
@@ -546,31 +546,30 @@ if (nrow(cutData) > 9) {
   p.v.longneo<-signif(p.v.longneo[2,4], digits = 3)
   
   longneo<-ggplot(cutData, aes(y=NeoplasiaPrevalence*100, x=log10(max_longevity))) + 
-    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
     scale_y_continuous(
       limits = c(0,75),
       breaks = c(0, 25,50,75),
       labels = c(0, 25,50,75))+
-    geom_abline(intercept = coef(longevity.neo)[1]*100, slope =  coef(longevity.neo)[2]*100,
-                color = 'grey',size = 1.2) +
+    stat_smooth(method = "lm", se = FALSE, color = 'grey', size = 1.2) +
     theme_cowplot(12)+
     theme(axis.title = element_text(size = 18))+
     ylab("Neoplasia Prevalence (%)") +
     xlab("(log10) Max Longevity (Mo)") +
-    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
+    geom_point(aes(size = RecordsWithDenominators)) +
     scale_size(name   = "Total Necropsies",
                breaks = c(20,100,200,300,477),
                labels =  c(20,100,200,300,477))+
     geom_text_repel(aes(label=ifelse(NeoplasiaPrevalence > .3,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
     guides(colour = guide_legend(override.aes = list(size=5))) +
-    labs(title = "A")+
+    labs(title = "Neoplasia Prevalence vs. Longevity",
+         subtitle =bquote(p-value:.(p.v.longneo)~R^2:.(r.v.longneo)~Lambda:.(ld.v.longneo)))+
     theme(
       plot.title = element_text(size = 20, face = "bold")) +
     theme(legend.position = "bottom")+
-    labs(colour="Class", size="Total Necropsies")
+    labs( size="Total Necropsies")
   
   
-  ggsave(filename='longneo.png', width=13, height=10, limitsize=FALSE,bg="white")
+  ggsave(filename='longneo.png', width=12, height=8, limitsize=FALSE,bg="white")
   
   #rbind adds a new row to a dataframe
   SummaryStats <- rbind(SummaryStats, list("Neo vs Longevity",nrow(cutData), r.v.longneo, p.v.longneo, ld.v.longneo))
@@ -624,7 +623,6 @@ if (nrow(cutData) > 9) {
   p.v.longmal<-signif(p.v.longmal[2,4], digits = 3)
   
   ggplot(cutData, aes(y=MalignancyPrevalence*100, x=log10(max_longevity))) + 
-    scale_color_manual(values = c("Mammalia" = "#EB1D24", "Sauropsida"= "#008b45ff", "Amphibia"= "#3B4992ff" ))+
     scale_y_continuous(
       limits = c(0,75),
       breaks = c(0, 25,50,75),
@@ -637,17 +635,18 @@ if (nrow(cutData) > 9) {
     theme(axis.title = element_text(size = 18))+
     ylab("Malignancy Prevalence (%)") +
     xlab("Max Longevity (Mo)") +
-    geom_point(aes(colour= Class, size = RecordsWithDenominators)) +
-    geom_text_repel(aes(label=ifelse( MalignancyPrevalence > .2,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
+    geom_point(aes(size = RecordsWithDenominators)) +
+    geom_text_repel(aes(label=ifelse( MalignancyPrevalence > .15,as.character(common_name),'')),max.overlaps = Inf,size=5, direction = "y")+
     guides(colour = guide_legend(override.aes = list(size=5))) +
-    labs(title = "B")+
+    labs(title = "Malignancy Prevalence vs. Longevity",
+         subtitle =bquote(p-value:.(p.v.longmal)~R^2:.(r.v.longmal)~Lambda:.(ld.v.longmal)))+
     theme(
       plot.title = element_text(size = 20, face = "bold")) +
-    theme(legend.position = "bottom")+   labs(colour="Class", size="Total Necropsies")+
+    theme(legend.position = "bottom")+   labs(size="Total Necropsies")+
     guides(size=guide_legend())
   #annotate("text", x=1.07, y=50.3, label = "5", size = 7)
   
-  ggsave(filename='S5longmal.png', width=13, height=10, limitsize=FALSE,bg="white")
+  ggsave(filename='S5longmal.png', width=12, height=8, limitsize=FALSE,bg="white")
   
   #rbind adds a new row to a dataframe
   SummaryStats <- rbind(SummaryStats, list("Mal vs Longevity",nrow(cutData), r.v.longmal, p.v.longmal, ld.v.longmal))
